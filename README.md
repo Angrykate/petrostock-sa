@@ -67,6 +67,18 @@ petrostack-sa/
 - Node.js 18+
 - PostgreSQL 15+
 
+### Environnement Python pour les notebooks
+
+Créer la `.venv` à la racine du projet puis installer les dépendances des notebooks:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Les notebooks utilisent principalement `pandas`, `numpy`, `matplotlib`, `seaborn`, `statsmodels`, `prophet`, `scikit-learn`, `xgboost`, `ipykernel` et `jupyter`.
+
 ### Backend
 
 ```bash
