@@ -1,46 +1,38 @@
-# Frontend (Next.js) — PetroStock
+# Frontend PetroStock SA
 
-Quick notes to run the frontend and switch between mock mode and a real backend.
+Interface Next.js (Pages Router) + Tailwind — design clair type back-office industriel.
 
-Prerequisites
-- Node.js (tested with Node 22.x) and npm
-
-Install
+## Lancer
 
 ```bash
 cd frontend
 npm install --legacy-peer-deps
-```
-
-Run development server
-
-```bash
 npm run dev
 ```
 
-Build for production
+Ouvre [http://localhost:3000](http://localhost:3000).
 
-```bash
-npm run build
-npm run start
-```
+## Structure de navigation
 
-Mock vs Real API
-- By default the app uses a built-in mock layer. To connect to a real backend:
-  1. Edit `frontend/lib/api.js` and set `MODE_MOCK = false`.
-  2. Ensure `NEXT_PUBLIC_API_URL` points to your backend in `.env.local` (e.g. `http://localhost:8000`).
-  3. Start the backend and make sure CORS allows `http://localhost:3000`.
+| Section | Pages |
+|---|---|
+| Pilotage | `/` Tableau de bord |
+| Stocks | `/stocks`, `/stocks/alertes`, `/stocks/historique` |
+| Prévisions IA | `/previsions`, `/previsions/ruptures` |
+| Anomalies | `/anomalies`, `/anomalies/analyser` |
+| Approvisionnement | `/commandes`, `/commandes/fournisseurs`, `/commandes/nouvelle` |
+| Opérations | `/incidents`, `/incidents/declarer` |
+| Finances | `/finances`, `/finances/factures`, `/finances/clients` |
 
-API endpoints expected (when `MODE_MOCK = false`):
-- `GET /kpi/`
-- `GET /stocks/alertes/`
-- `GET /stocks/{depot_id}`
-- `GET /previsions/{produit_id}`
-- `GET /anomalies/`
-- `GET|POST /commandes/`
-- `GET|POST /incidents/`
-- `GET /factures/`
+Le menu latéral s'adapte au **profil** (dépôt / achats / direction).
 
-Notes
-- If API field names differ from the mock objects, update pages in `frontend/pages/` accordingly.
-- To toggle mock data without editing code, consider converting `MODE_MOCK` to read from an env var.
+## Mock vs API réelle
+
+Par défaut le mode mock est actif. Pour brancher le backend :
+
+1. Créer `frontend/.env.local` :
+   ```
+   NEXT_PUBLIC_USE_MOCK=false
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   ```
+2. Démarrer l'API FastAPI avec CORS autorisant `http://localhost:3000`.
