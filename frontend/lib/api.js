@@ -1,5 +1,4 @@
 import {
-  mockAlertes,
   mockAnomalies,
   mockCaMensuel,
   mockCommandes,
@@ -11,6 +10,13 @@ import {
   mockRuptures,
   mockStocks,
 } from "./mockData";
+import {
+  mockActionsPrioritaires,
+  mockAlertes,
+  mockJournal,
+  mockMatriceDepots,
+  mockPrevisionsResume,
+} from "./opsData";
 
 const MODE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -22,7 +28,7 @@ function clone(donnees) {
 function creerCommande(donnees) {
   const nouvelle = {
     bon_commande_id: `BC${24000 + mockCommandes.length + 1}`,
-    date_commande: donnees.date_commande,
+    date_commande: donnees.date_commande || new Date().toISOString().slice(0, 10),
     fournisseur_id: donnees.fournisseur_id,
     depot_destination_id: donnees.depot_destination_id,
     produit_id: donnees.produit_id,
@@ -68,24 +74,59 @@ function detecterAnomalie(body) {
   };
 }
 
+function appliquerActionAlerte(body) {
+  const ids = body.ids || [];
+  const action = body.action;
+  const resultats = [];
+  ids.forEach((id) => {
+    const a = mockAlertes.find((x) => x.id === id);
+    if (!a) return;
+    if (action === "ignorer") a.statut = "ignoree";
+    if (action === "marquer_traitee") a.statut = "traitee";
+    if (action === "escalader") {
+      a.statut = "en_traitement";
+      a.assignee = "achats";
+      a.priorite = 1;
+    }
+    if (action === "generer_commande") {
+      a.statut = "en_traitement";
+      const cmd = creerCommande({
+        date_commande: new Date().toISOString().slice(0, 10),
+        fournisseur_id: a.suggestion.fournisseur_id,
+        depot_destination_id: a.depot_id,
+        produit_id: a.produit_id,
+        quantite_commandee: a.suggestion.quantite_suggeree,
+      });
+      resultats.push({ alerte_id: id, commande: cmd });
+    }
+  });
+  return { ok: true, action, traites: ids.length, resultats };
+}
+
 async function appelApi(endpoint, options = {}) {
   if (MODE_MOCK) {
-    await new Promise((r) => setTimeout(r, 80));
+    await new Promise((r) => setTimeout(r, 60));
     const method = (options.method || "GET").toUpperCase();
     const body = options.body ? JSON.parse(options.body) : null;
     const path = endpoint.split("?")[0];
 
     if (path === "/kpi/") return clone(mockKpi);
+    if (path === "/ops/actions/") return clone(mockActionsPrioritaires);
+    if (path === "/ops/journal/") return clone(mockJournal);
+    if (path === "/ops/matrice-depots/") return clone(mockMatriceDepots);
     if (path === "/stocks/alertes/") return clone(mockAlertes);
+    if (path === "/stocks/alertes/actions" && method === "POST") return appliquerActionAlerte(body);
     if (path === "/stocks/") return clone(mockStocks.D001);
-    if (path.startsWith("/stocks/")) {
+    if (path.startsWith("/stocks/") && path !== "/stocks/alertes/" && !path.includes("alertes")) {
       const depotId = path.split("/").filter(Boolean)[1];
       return clone(mockStocks[depotId] || []);
     }
-    if (path.startsWith("/previsions/")) {
+    if (path === "/previsions/resume/") return clone(mockPrevisionsResume);
+    if (path.startsWith("/previsions/") && path !== "/previsions/resume/") {
       const produitId = path.split("/").filter(Boolean)[1];
       return clone(mockPrevisions[produitId] || mockPrevisions.PRD003);
     }
+    if (path === "/ruptures/") return clone(mockRuptures);
     if (path.startsWith("/ruptures/")) {
       const depotId = path.split("/").filter(Boolean)[1];
       const params = new URLSearchParams(endpoint.split("?")[1] || "");
@@ -93,11 +134,13 @@ async function appelApi(endpoint, options = {}) {
       const liste = mockRuptures.filter((r) => r.depot_id === depotId && (!produitId || r.produit_id === produitId));
       return clone(liste[0] || mockRuptures[0]);
     }
-    if (path === "/ruptures/") return clone(mockRuptures);
     if (path === "/anomalies/") return clone(mockAnomalies);
     if (path === "/anomalies/detecter" && method === "POST") return detecterAnomalie(body);
     if (path === "/commandes/" && method === "GET") return clone(mockCommandes);
     if (path === "/commandes/" && method === "POST") return creerCommande(body);
+    if (path === "/commandes/batch" && method === "POST") {
+      return { ok: true, creees: (body.items || []).map((it) => creerCommande(it)) };
+    }
     if (path === "/fournisseurs/") return clone(mockMetas.fournisseurs);
     if (path === "/incidents/" && method === "GET") return clone(mockIncidents);
     if (path === "/incidents/" && method === "POST") return creerIncident(body);

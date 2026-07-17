@@ -18,6 +18,10 @@ import Badge from "./ui/Badge";
 function isActive(pathname, href, exact) {
   if (exact) return pathname === href;
   if (href === "/") return pathname === "/";
+  // Évite que /stocks active aussi /stocks/alertes (entrée menu distincte)
+  if (href === "/stocks") {
+    return pathname === "/stocks" || pathname.startsWith("/stocks/historique");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -30,7 +34,10 @@ export default function AppShell({ children }) {
   const notifsRef = useRef(null);
 
   useEffect(() => {
-    api.get("/stocks/alertes/").then(setAlertes).catch(() => setAlertes([]));
+    api
+      .get("/stocks/alertes/")
+      .then((list) => setAlertes(list.filter((a) => a.statut === "ouverte" || !a.statut)))
+      .catch(() => setAlertes([]));
   }, []);
 
   useEffect(() => {
@@ -191,9 +198,11 @@ export default function AppShell({ children }) {
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="text-sm font-medium text-ink">
-                                {labelDepot(a.depot_id)} · {labelProduit(a.produit_id)}
+                                {a.titre || `${labelDepot(a.depot_id)} · ${labelProduit(a.produit_id)}`}
                               </p>
-                              <p className="mt-0.5 text-xs text-ink-muted">Seuil atteint le {a.date}</p>
+                              <p className="mt-0.5 text-xs text-ink-muted">
+                                {a.jours_couverture != null ? `${a.jours_couverture} j de couverture` : `Seuil le ${a.date}`}
+                              </p>
                             </div>
                             <Badge
                               label={niveauAlerte(a.niveau) === "critique" ? "Critique" : "Bas"}

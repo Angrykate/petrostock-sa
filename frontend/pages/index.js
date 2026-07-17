@@ -2,257 +2,167 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  CheckCircle2,
-  DollarSign,
+  ArrowRight,
+  ClipboardList,
   FileWarning,
-  Gauge,
   RefreshCw,
-  ShieldCheck,
+  ShieldAlert,
+  Sparkles,
+  Truck,
 } from "lucide-react";
 import { api } from "../lib/api";
-import { formatHeure, formatJours, formatNombre, formatPct, formatUsd } from "../lib/format";
-import { labelDepot, labelProduit, niveauAlerte } from "../lib/mockData";
+import { formatFcfa, formatHeure, formatJours, formatNombre, formatPct, formatScore, formatUsd } from "../lib/format";
+import { labelDepot, labelProduit } from "../lib/mockData";
 import { useProfile } from "../context/ProfileContext";
 import PageHeader from "../components/ui/PageHeader";
-import KpiCard from "../components/ui/KpiCard";
+import StatStrip from "../components/ui/StatStrip";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
-import EmptyState from "../components/ui/EmptyState";
 import ErrorBanner from "../components/ui/ErrorBanner";
-import TankGauge from "../components/ui/TankGauge";
-import { SkeletonKpi, SkeletonBlock } from "../components/ui/Skeleton";
-import { StockAreaChart } from "../components/charts";
+import { SkeletonBlock } from "../components/ui/Skeleton";
+
+const ICONS = {
+  commande_urgente: Truck,
+  alerte_critique: AlertTriangle,
+  incident: FileWarning,
+  commande_retard: ClipboardList,
+  anomalie: ShieldAlert,
+  transfert: ArrowRight,
+};
 
 export default function DashboardPage() {
-  const { isDirection, isDepot } = useProfile();
+  const { isDirection, isAchats } = useProfile();
   const [kpi, setKpi] = useState(null);
+  const [actions, setActions] = useState([]);
+  const [matrice, setMatrice] = useState([]);
+  const [journal, setJournal] = useState([]);
   const [alertes, setAlertes] = useState([]);
-  const [incidents, setIncidents] = useState([]);
-  const [stocks, setStocks] = useState([]);
-  const [metas, setMetas] = useState({ depots: [] });
-  const [periode, setPeriode] = useState(30);
+  const [resume, setResume] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState(null);
-  const [dernierRefresh, setDernierRefresh] = useState(null);
-  const [rafraichit, setRafraichit] = useState(false);
+  const [maj, setMaj] = useState(null);
 
-  const charger = useCallback(async (silent = false) => {
-    if (!silent) setChargement(true);
-    else setRafraichit(true);
+  const charger = useCallback(async () => {
     setErreur(null);
     try {
-      const [k, a, i, s, m] = await Promise.all([
+      const [k, a, m, j, al, r] = await Promise.all([
         api.get("/kpi/"),
+        api.get("/ops/actions/"),
+        api.get("/ops/matrice-depots/"),
+        api.get("/ops/journal/"),
         api.get("/stocks/alertes/"),
-        api.get("/incidents/"),
-        api.get("/stocks/D001"),
-        api.get("/metas/"),
+        api.get("/previsions/resume/"),
       ]);
       setKpi(k);
-      setAlertes(a);
-      setIncidents(i.filter((x) => x.statut === "Ouvert").slice(0, 5));
-      setStocks(s);
-      setMetas(m);
-      setDernierRefresh(new Date());
+      setActions(a);
+      setMatrice(m);
+      setJournal(j);
+      setAlertes(al);
+      setResume(r);
+      setMaj(new Date());
     } catch (e) {
       setErreur(e.message);
     } finally {
       setChargement(false);
-      setRafraichit(false);
     }
   }, []);
 
   useEffect(() => {
-    charger(false);
-    const id = setInterval(() => charger(true), 60000);
+    charger();
+    const id = setInterval(charger, 60000);
     return () => clearInterval(id);
   }, [charger]);
 
-  const depotsCards = useMemo(() => {
-    return (metas.depots || []).map((d) => {
-      const alertesDepot = alertes.filter((a) => a.depot_id === d.id);
-      const niveau = alertesDepot.some((a) => niveauAlerte(a.niveau) === "critique")
-        ? "critique"
-        : alertesDepot.length
-          ? "attention"
-          : "normal";
-      const taux =
-        niveau === "critique" ? 42 : niveau === "attention" ? 58 : 86;
-      return { ...d, niveau, taux, alertes: alertesDepot.length };
-    });
-  }, [metas, alertes]);
+  const alertesOuvertes = useMemo(() => alertes.filter((a) => a.statut === "ouverte"), [alertes]);
+  const critiques = alertesOuvertes.filter((a) => a.niveau === "critique");
+  const rupturesCritiques = resume.filter((r) => r.niveau === "critique");
 
-  const serie = useMemo(() => stocks.slice(-periode), [stocks, periode]);
-  const alertesUrgentes = useMemo(
-    () => [...alertes].sort((a, b) => (a.jours_couverture || 99) - (b.jours_couverture || 99)).slice(0, 10),
-    [alertes]
-  );
+  const strip = [
+    { label: "Valeur stock", value: formatUsd(kpi?.valeur_totale_stock_usd), hint: isDirection ? `${formatPct(kpi?.variation_journaliere_pct)} j/j` : null },
+    { label: "Alertes ouvertes", value: formatNombre(alertesOuvertes.length), tone: critiques.length ? "danger" : "warning", hint: `${critiques.length} critique(s)` },
+    { label: "Ruptures < 5 j", value: formatNombre(rupturesCritiques.length), tone: "danger", hint: "selon modèle IA" },
+    { label: "Remplissage moyen", value: formatPct(kpi?.taux_remplissage_moyen_pct), tone: "success" },
+    { label: "Incidents ouverts", value: formatNombre(kpi?.incidents_ouverts), tone: "warning" },
+    { label: "Dernière maj", value: formatHeure(maj), hint: "auto 60 s" },
+  ];
 
   return (
     <div className="animate-fade-up space-y-5">
       <PageHeader
-        title="Tableau de bord"
-        description="État opérationnel des stocks, alertes et incidents en un coup d'œil."
+        title="Poste de pilotage"
+        description="Ce qui exige une décision maintenant — pas un résumé décoratif."
         actions={
-          <Button variant="secondary" onClick={() => charger(true)} loading={rafraichit}>
+          <Button variant="secondary" onClick={charger}>
             <RefreshCw size={14} /> Actualiser
           </Button>
         }
       />
 
-      {erreur && (
-        <ErrorBanner
-          title="Impossible de contacter le serveur"
-          description={`Dernière mise à jour : ${formatHeure(dernierRefresh)}. ${erreur}`}
-          onRetry={() => charger(false)}
-        />
-      )}
+      {erreur && <ErrorBanner title="Impossible de contacter le serveur" description={erreur} onRetry={charger} />}
 
-      {chargement ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[1, 2, 3, 4].map((i) => (
-            <SkeletonKpi key={i} />
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 stagger">
-          <KpiCard
-            title="Valeur totale du stock"
-            value={formatUsd(kpi?.valeur_totale_stock_usd)}
-            icon={DollarSign}
-            variation={isDirection ? kpi?.variation_journaliere_pct : undefined}
-          />
-          <KpiCard
-            title="Alertes actives"
-            value={formatNombre(kpi?.nombre_alertes_actives)}
-            icon={AlertTriangle}
-            tone={(kpi?.nombre_alertes_actives || 0) > 3 ? "danger" : "warning"}
-          />
-          <KpiCard
-            title="Taux de remplissage moyen"
-            value={formatPct(kpi?.taux_remplissage_moyen_pct)}
-            icon={Gauge}
-            tone="success"
-          />
-          <KpiCard
-            title="Incidents ouverts"
-            value={formatNombre(kpi?.incidents_ouverts)}
-            icon={FileWarning}
-            tone={(kpi?.incidents_ouverts || 0) > 0 ? "warning" : "default"}
-          />
-        </div>
-      )}
+      <StatStrip items={strip} />
 
-      <Card
-        title="État des dépôts"
-        action={rafraichit ? <span className="text-[11px] text-ink-faint">Mise à jour…</span> : null}
-      >
-        {chargement ? (
-          <SkeletonBlock rows={2} />
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {depotsCards.map((d) => (
-              <Link
-                key={d.id}
-                href={`/stocks?depot=${d.id}`}
-                className="flex items-center gap-3 rounded border border-line p-3 transition hover:border-navy-300 hover:bg-navy-50"
-              >
-                <TankGauge taux={d.taux} height={72} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{d.label}</p>
-                  <p className="text-xs text-ink-muted">{d.region}</p>
-                  <div className="mt-1.5">
-                    <Badge
-                      label={d.niveau === "critique" ? "Critique" : d.niveau === "attention" ? "Attention" : "Normal"}
-                      niveau={d.niveau}
-                    />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+        {/* File d'actions */}
         <Card
-          title="Alertes de stock bas"
+          title="À traiter maintenant"
           action={
-            <Link href="/stocks/alertes" className="text-xs font-medium text-navy-700 hover:underline">
-              Voir toutes
-            </Link>
+            <span className="text-[11px] text-ink-muted">
+              {actions.length} action{actions.length > 1 ? "s" : ""} prioritaire{actions.length > 1 ? "s" : ""}
+            </span>
           }
         >
           {chargement ? (
-            <SkeletonBlock />
-          ) : alertesUrgentes.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="Aucune alerte active"
-              description="Tous les dépôts sont au-dessus du seuil critique."
-            />
+            <SkeletonBlock rows={6} />
           ) : (
             <ul className="divide-y divide-line">
-              {alertesUrgentes.map((a) => (
-                <li key={`${a.depot_id}-${a.produit_id}-${a.date}`}>
-                  <Link
-                    href={`/previsions/ruptures?depot=${a.depot_id}&produit=${a.produit_id}`}
-                    className="flex items-center justify-between gap-3 py-2.5 hover:bg-canvas"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-ink">
-                        {labelDepot(a.depot_id)} · {labelProduit(a.produit_id)}
-                      </p>
-                      <p className="text-xs text-ink-muted">{formatJours(a.jours_couverture)} de couverture</p>
+              {actions.map((act) => {
+                const Icon = ICONS[act.type] || Sparkles;
+                return (
+                  <li key={act.id} className="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex gap-3">
+                      <div
+                        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded ${
+                          act.priorite === 1 ? "bg-danger-soft text-danger" : "bg-navy-50 text-navy-700"
+                        }`}
+                      >
+                        <Icon size={15} />
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-ink">{act.titre}</p>
+                          <Badge label={act.priorite === 1 ? "P1" : "P2"} niveau={act.priorite === 1 ? "critique" : "attention"} />
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-ink-muted">{act.detail}</p>
+                      </div>
                     </div>
-                    <Badge
-                      label={niveauAlerte(a.niveau) === "critique" ? "Critique" : "Bas"}
-                      niveau={niveauAlerte(a.niveau)}
-                    />
-                  </Link>
-                </li>
-              ))}
+                    <Button href={act.action_href} className="shrink-0 !text-xs">
+                      {act.action_label}
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
 
-        <Card
-          title="Incidents récents"
-          action={
-            <Link href="/incidents" className="text-xs font-medium text-navy-700 hover:underline">
-              Voir tous
-            </Link>
-          }
-        >
+        {/* Journal */}
+        <Card title="Journal opérationnel (nuit / matin)">
           {chargement ? (
-            <SkeletonBlock />
-          ) : incidents.length === 0 ? (
-            <EmptyState
-              icon={ShieldCheck}
-              title="Aucun incident récent"
-              description="Rien à signaler sur les 30 derniers jours."
-            />
+            <SkeletonBlock rows={7} />
           ) : (
-            <ul className="divide-y divide-line">
-              {incidents.map((inc) => (
-                <li key={inc.incident_id} className="flex items-center justify-between gap-3 py-2.5">
+            <ul className="space-y-0">
+              {journal.map((e, i) => (
+                <li key={i} className="flex gap-3 border-b border-line py-2.5 last:border-0">
+                  <span className="w-10 shrink-0 font-mono text-[11px] text-ink-faint">{e.heure}</span>
                   <div>
-                    <p className="text-sm font-medium text-ink">
-                      {inc.type_incident} · {labelDepot(inc.depot_id)}
-                    </p>
-                    <p className="text-xs text-ink-muted">{inc.date_incident}</p>
+                    <Badge
+                      label={e.type}
+                      niveau={e.type === "alerte" || e.type === "incident" ? "critique" : e.type === "ia" ? "info" : "neutre"}
+                    />
+                    <p className="mt-1 text-xs text-ink-soft">{e.texte}</p>
                   </div>
-                  <Badge
-                    label={inc.gravite}
-                    niveau={
-                      inc.gravite === "Critique" || inc.gravite === "Élevé"
-                        ? "critique"
-                        : inc.gravite === "Modéré"
-                          ? "attention"
-                          : "neutre"
-                    }
-                  />
                 </li>
               ))}
             </ul>
@@ -260,29 +170,156 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {!isDepot && (
+      {/* Matrice dépôts — dense */}
+      <Card
+        title="Matrice des 8 dépôts"
+        action={
+          <Link href="/stocks" className="text-xs font-medium text-navy-700 hover:underline">
+            Vue stocks →
+          </Link>
+        }
+      >
+        {chargement ? (
+          <SkeletonBlock rows={8} />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line bg-canvas text-[11px] uppercase tracking-wide text-ink-muted">
+                  <th className="px-3 py-2.5 font-semibold">Dépôt</th>
+                  <th className="px-3 py-2.5 font-semibold">Région</th>
+                  <th className="px-3 py-2.5 font-semibold">Remplissage</th>
+                  <th className="px-3 py-2.5 font-semibold">Valeur</th>
+                  <th className="px-3 py-2.5 font-semibold">Alertes</th>
+                  <th className="px-3 py-2.5 font-semibold">Couverture min.</th>
+                  <th className="px-3 py-2.5 font-semibold">Statut</th>
+                  <th className="px-3 py-2.5 font-semibold" />
+                </tr>
+              </thead>
+              <tbody>
+                {matrice.map((d) => (
+                  <tr key={d.id} className="border-b border-line hover:bg-navy-50/50">
+                    <td className="px-3 py-2.5 font-medium text-ink">{d.label}</td>
+                    <td className="px-3 py-2.5 text-ink-muted">{d.region}</td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 rounded bg-canvas-tint">
+                          <div
+                            className="h-1.5 rounded"
+                            style={{
+                              width: `${d.taux_remplissage}%`,
+                              background: d.statut === "critique" ? "#C63B3B" : d.statut === "attention" ? "#C9841A" : "#1E8E5A",
+                            }}
+                          />
+                        </div>
+                        <span className="mono-nums text-xs">{formatPct(d.taux_remplissage)}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 mono-nums text-xs">{formatUsd(d.valeur_stock_usd)}</td>
+                    <td className="px-3 py-2.5">
+                      <span className="mono-nums">{d.alertes_ouvertes}</span>
+                      {d.alertes_critiques > 0 && (
+                        <span className="ml-1 text-[11px] font-semibold text-danger">({d.alertes_critiques} crit.)</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 mono-nums text-xs">{formatJours(d.jours_min_couverture)}</td>
+                    <td className="px-3 py-2.5">
+                      <Badge
+                        label={d.statut === "critique" ? "Critique" : d.statut === "attention" ? "Attention" : "Normal"}
+                        niveau={d.statut}
+                      />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <Link href={`/stocks?depot=${d.id}`} className="text-xs font-medium text-navy-700 hover:underline">
+                        Ouvrir
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* Prévisions critiques + alertes top */}
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card
-          title="Évolution du stock (dépôt référence)"
+          title="Ruptures estimées < 5 jours"
           action={
-            <div className="flex gap-1">
-              {[7, 30, 90].map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPeriode(p)}
-                  className={`rounded px-2.5 py-1 text-xs font-medium ${
-                    periode === p ? "bg-navy-700 text-white" : "border border-line text-ink-muted hover:bg-canvas"
-                  }`}
-                >
-                  {p}j
-                </button>
-              ))}
-            </div>
+            <Link href="/previsions" className="text-xs font-medium text-navy-700 hover:underline">
+              Centre prévisions →
+            </Link>
           }
         >
-          {chargement ? <SkeletonBlock rows={6} /> : <StockAreaChart data={serie} animate={!rafraichit} />}
+          {chargement ? (
+            <SkeletonBlock />
+          ) : rupturesCritiques.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink-muted">Aucune rupture critique estimée.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {rupturesCritiques.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-ink">
+                      {labelDepot(r.depot_id)} · {labelProduit(r.produit_id)}
+                    </p>
+                    <p className="text-xs text-ink-muted">
+                      Stock {formatNombre(r.stock_actuel)} · conso {formatNombre(r.conso_jour)}/j · suggestion{" "}
+                      {formatNombre(r.quantite_suggeree)} · {formatFcfa(r.cout_estime_fcfa)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold text-danger mono-nums">{formatJours(r.jours_avant_rupture)}</p>
+                    {isAchats && (
+                      <Link
+                        href={`/commandes/nouvelle?depot=${r.depot_id}&produit=${r.produit_id}&qte=${r.quantite_suggeree}`}
+                        className="text-[11px] font-medium text-navy-700 hover:underline"
+                      >
+                        Commander
+                      </Link>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
-      )}
+
+        <Card
+          title="Alertes ouvertes (top priorité)"
+          action={
+            <Link href="/stocks/alertes" className="text-xs font-medium text-navy-700 hover:underline">
+              Centre d&apos;alertes →
+            </Link>
+          }
+        >
+          {chargement ? (
+            <SkeletonBlock />
+          ) : (
+            <ul className="divide-y divide-line">
+              {[...alertesOuvertes]
+                .sort((a, b) => a.priorite - b.priorite || a.jours_couverture - b.jours_couverture)
+                .slice(0, 6)
+                .map((a) => (
+                  <li key={a.id} className="py-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium text-ink">{a.titre}</p>
+                        <p className="mt-0.5 text-xs text-ink-muted">{a.message}</p>
+                        <p className="mt-1 text-[11px] text-ink-faint">
+                          Suggestion : {formatNombre(a.suggestion.quantite_suggeree)} via {a.suggestion.fournisseur_nom} (score{" "}
+                          {formatScore(a.suggestion.fournisseur_score)})
+                        </p>
+                      </div>
+                      <Badge label={a.niveau === "critique" ? "Critique" : "Bas"} niveau={a.niveau} />
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

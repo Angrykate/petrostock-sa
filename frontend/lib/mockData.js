@@ -94,6 +94,20 @@ export const mockAlertes = [
   { date: "2026-07-07", depot_id: "D001", produit_id: "PRD005", stock_fin_jour: 63000, seuil_alerte: 80000, niveau: "rouge", jours_couverture: 4 },
   { date: "2026-07-09", depot_id: "D006", produit_id: "PRD002", stock_fin_jour: 41000, seuil_alerte: 52000, niveau: "orange", jours_couverture: 5 },
   { date: "2026-07-10", depot_id: "D008", produit_id: "PRD001", stock_fin_jour: 18500, seuil_alerte: 28000, niveau: "rouge", jours_couverture: 2 },
+  { date: "2026-07-11", depot_id: "D002", produit_id: "PRD001", stock_fin_jour: 41200, seuil_alerte: 55000, niveau: "rouge", jours_couverture: 3 },
+  { date: "2026-07-11", depot_id: "D007", produit_id: "PRD003", stock_fin_jour: 38500, seuil_alerte: 48000, niveau: "orange", jours_couverture: 6 },
+  { date: "2026-07-12", depot_id: "D003", produit_id: "PRD002", stock_fin_jour: 29800, seuil_alerte: 40000, niveau: "orange", jours_couverture: 7 },
+  { date: "2026-07-12", depot_id: "D005", produit_id: "PRD004", stock_fin_jour: 15200, seuil_alerte: 28000, niveau: "rouge", jours_couverture: 2 },
+  { date: "2026-07-13", depot_id: "D006", produit_id: "PRD001", stock_fin_jour: 22100, seuil_alerte: 30000, niveau: "orange", jours_couverture: 5 },
+  { date: "2026-07-13", depot_id: "D008", produit_id: "PRD002", stock_fin_jour: 9800, seuil_alerte: 18000, niveau: "rouge", jours_couverture: 1 },
+  { date: "2026-07-14", depot_id: "D001", produit_id: "PRD001", stock_fin_jour: 88000, seuil_alerte: 95000, niveau: "orange", jours_couverture: 8 },
+  { date: "2026-07-14", depot_id: "D004", produit_id: "PRD002", stock_fin_jour: 19800, seuil_alerte: 32000, niveau: "rouge", jours_couverture: 3 },
+  { date: "2026-07-15", depot_id: "D007", produit_id: "PRD005", stock_fin_jour: 12400, seuil_alerte: 20000, niveau: "orange", jours_couverture: 6 },
+  { date: "2026-07-15", depot_id: "D002", produit_id: "PRD005", stock_fin_jour: 8900, seuil_alerte: 22000, niveau: "rouge", jours_couverture: 2 },
+  { date: "2026-07-16", depot_id: "D003", produit_id: "PRD004", stock_fin_jour: 16700, seuil_alerte: 25000, niveau: "orange", jours_couverture: 5 },
+  { date: "2026-07-16", depot_id: "D005", produit_id: "PRD003", stock_fin_jour: 72000, seuil_alerte: 90000, niveau: "orange", jours_couverture: 7 },
+  { date: "2026-07-17", depot_id: "D008", produit_id: "PRD003", stock_fin_jour: 14200, seuil_alerte: 26000, niveau: "rouge", jours_couverture: 2 },
+  { date: "2026-07-17", depot_id: "D006", produit_id: "PRD004", stock_fin_jour: 11300, seuil_alerte: 18000, niveau: "orange", jours_couverture: 4 },
 ];
 
 export const mockPrevisions = {
@@ -168,6 +182,22 @@ export const mockRuptures = [
   { depot_id: "D008", produit_id: "PRD001", jours_avant_rupture: 2, niveau: "critique", stock_actuel: 18500, conso_jour: 7100 },
   { depot_id: "D005", produit_id: "PRD002", jours_avant_rupture: 12, niveau: "normal", stock_actuel: 118000, conso_jour: 9500 },
   { depot_id: "D006", produit_id: "PRD002", jours_avant_rupture: 5, niveau: "attention", stock_actuel: 41000, conso_jour: 7800 },
+  { depot_id: "D002", produit_id: "PRD001", jours_avant_rupture: 3, niveau: "critique", stock_actuel: 41200, conso_jour: 13800 },
+  { depot_id: "D007", produit_id: "PRD003", jours_avant_rupture: 6, niveau: "attention", stock_actuel: 38500, conso_jour: 6400 },
+  { depot_id: "D003", produit_id: "PRD002", jours_avant_rupture: 7, niveau: "attention", stock_actuel: 29800, conso_jour: 4200 },
+  { depot_id: "D005", produit_id: "PRD004", jours_avant_rupture: 2, niveau: "critique", stock_actuel: 15200, conso_jour: 7600 },
+  { depot_id: "D006", produit_id: "PRD001", jours_avant_rupture: 5, niveau: "attention", stock_actuel: 22100, conso_jour: 4400 },
+  { depot_id: "D008", produit_id: "PRD002", jours_avant_rupture: 1, niveau: "critique", stock_actuel: 9800, conso_jour: 8200 },
+  { depot_id: "D001", produit_id: "PRD001", jours_avant_rupture: 8, niveau: "attention", stock_actuel: 88000, conso_jour: 11000 },
+  { depot_id: "D004", produit_id: "PRD002", jours_avant_rupture: 3, niveau: "critique", stock_actuel: 19800, conso_jour: 6600 },
+  { depot_id: "D007", produit_id: "PRD005", jours_avant_rupture: 6, niveau: "attention", stock_actuel: 12400, conso_jour: 2100 },
+  { depot_id: "D002", produit_id: "PRD005", jours_avant_rupture: 2, niveau: "critique", stock_actuel: 8900, conso_jour: 4500 },
+  { depot_id: "D003", produit_id: "PRD004", jours_avant_rupture: 5, niveau: "attention", stock_actuel: 16700, conso_jour: 3300 },
+  { depot_id: "D005", produit_id: "PRD003", jours_avant_rupture: 7, niveau: "attention", stock_actuel: 72000, conso_jour: 10200 },
+  { depot_id: "D008", produit_id: "PRD003", jours_avant_rupture: 2, niveau: "critique", stock_actuel: 14200, conso_jour: 7100 },
+  { depot_id: "D006", produit_id: "PRD004", jours_avant_rupture: 4, niveau: "critique", stock_actuel: 11300, conso_jour: 2800 },
+  { depot_id: "D001", produit_id: "PRD002", jours_avant_rupture: 14, niveau: "normal", stock_actuel: 145000, conso_jour: 10200 },
+  { depot_id: "D007", produit_id: "PRD001", jours_avant_rupture: 11, niveau: "normal", stock_actuel: 52000, conso_jour: 4700 },
 ];
 
 export const mockAnomalies = [

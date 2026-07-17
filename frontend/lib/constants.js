@@ -10,11 +10,12 @@ export const ROLE_OPTIONS = [
   { value: ROLES.direction, label: "Direction" },
 ];
 
-/** Les 7 pages principales du menu */
+/** Navigation principale — alertes & prévisions en postes dédiés */
 export const NAV_ITEMS = [
-  { id: "dashboard", href: "/", label: "Tableau de bord", exact: true, roles: [ROLES.depot, ROLES.achats, ROLES.direction] },
+  { id: "dashboard", href: "/", label: "Pilotage", exact: true, roles: [ROLES.depot, ROLES.achats, ROLES.direction] },
+  { id: "alertes", href: "/stocks/alertes", label: "Alertes", roles: [ROLES.depot, ROLES.achats, ROLES.direction] },
   { id: "stocks", href: "/stocks", label: "Stocks", roles: [ROLES.depot, ROLES.achats, ROLES.direction] },
-  { id: "previsions", href: "/previsions", label: "Prévisions", roles: [ROLES.depot, ROLES.achats] },
+  { id: "previsions", href: "/previsions", label: "Prévisions IA", roles: [ROLES.depot, ROLES.achats] },
   { id: "anomalies", href: "/anomalies", label: "Anomalies", roles: [ROLES.depot, ROLES.achats] },
   { id: "commandes", href: "/commandes", label: "Commandes", roles: [ROLES.achats, ROLES.direction] },
   { id: "incidents", href: "/incidents", label: "Incidents", roles: [ROLES.depot, ROLES.achats, ROLES.direction] },

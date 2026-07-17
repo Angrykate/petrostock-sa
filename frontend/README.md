@@ -1,38 +1,76 @@
 # Frontend PetroStock SA
 
-Interface Next.js (Pages Router) + Tailwind — design clair type back-office industriel.
+Interface Next.js (Pages Router) + Tailwind.
 
-## Lancer
+## Prérequis
+
+- Node.js 18+ (idéalement 20+)
+- npm
+
+## Installation (une seule fois)
 
 ```bash
 cd frontend
+npm install
+```
+
+Si npm se plaint de conflits de peers :
+
+```bash
 npm install --legacy-peer-deps
+```
+
+## Démarrer le serveur
+
+Dans un terminal PowerShell :
+
+```bash
+cd c:\Users\USER\Documents\Projet\ProjetDeStage\frontend
 npm run dev
 ```
 
-Ouvre [http://localhost:3000](http://localhost:3000).
+Puis ouvre : [http://localhost:3000](http://localhost:3000)
 
-## Structure de navigation
+Le terminal affiche `✓ Ready` quand c’est bon. **Laisse ce terminal ouvert** tant que tu utilises l’app.
 
-| Section | Pages |
+## Arrêter le serveur
+
+Dans le **même terminal** où tourne `npm run dev` :
+
+- `Ctrl + C`
+- Confirme avec `O` / `Y` si Windows le demande
+
+Le serveur est coupé : plus rien sur le port 3000.
+
+### Si le port reste bloqué
+
+```powershell
+Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
+## Autres commandes utiles
+
+| Commande | Rôle |
 |---|---|
-| Pilotage | `/` Tableau de bord |
-| Stocks | `/stocks`, `/stocks/alertes`, `/stocks/historique` |
-| Prévisions IA | `/previsions`, `/previsions/ruptures` |
-| Anomalies | `/anomalies`, `/anomalies/analyser` |
-| Approvisionnement | `/commandes`, `/commandes/fournisseurs`, `/commandes/nouvelle` |
-| Opérations | `/incidents`, `/incidents/declarer` |
-| Finances | `/finances`, `/finances/factures`, `/finances/clients` |
+| `npm run dev` | Développement (rechargement auto) |
+| `npm run build` | Build de production |
+| `npm run start` | Servir le build (après `build`) |
+| `npm run lint` | Vérifier le code |
 
-Le menu latéral s'adapte au **profil** (dépôt / achats / direction).
+## Mode mock / API réelle
 
-## Mock vs API réelle
+Par défaut le frontend utilise des données mock (`.env.local`) :
 
-Par défaut le mode mock est actif. Pour brancher le backend :
+```
+NEXT_PUBLIC_USE_MOCK=true
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
-1. Créer `frontend/.env.local` :
-   ```
-   NEXT_PUBLIC_USE_MOCK=false
-   NEXT_PUBLIC_API_URL=http://localhost:8000
-   ```
-2. Démarrer l'API FastAPI avec CORS autorisant `http://localhost:3000`.
+Pour brancher le vrai backend FastAPI : mets `NEXT_PUBLIC_USE_MOCK=false`, lance l’API, puis redémarre `npm run dev`.
+
+## Menu principal
+
+Pilotage · Alertes · Stocks · Prévisions IA · Anomalies · Commandes · Incidents · Finances
+
+Le menu s’adapte au **profil** (dépôt / achats / direction) en bas de la barre latérale.
