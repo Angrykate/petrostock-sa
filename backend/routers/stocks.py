@@ -7,6 +7,10 @@ from database import get_db
 from models import Stock
 from schemas.stock import StockOut
 
+from utils.erreurs import ressource_non_trouvee
+
+from services.alerte_service import alerte_service
+
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 
 
@@ -49,6 +53,14 @@ def stock_par_depot(
     resultats = query.order_by(Stock.date.desc()).limit(100).all()
 
     if not resultats:
-        raise HTTPException(status_code=404, detail=f"Aucun stock trouvé pour le dépôt {depot_id}")
+        ressource_non_trouvee("Stock", depot_id)
 
     return resultats
+
+
+@router.get("/{depot_id}/alerte-niveau")
+def niveau_alerte_depot(depot_id: str, produit_id: str, db: Session = Depends(get_db)):
+    # jours_couverture proviendrait normalement du modèle de prévision des ruptures (Étape 7)
+    jours_couverture = ia_service.estimer_jours_rupture(depot_id, produit_id)
+    niveau = alerte_service.niveau_alerte(jours_couverture)
+    return {"depot_id": depot_id, "produit_id": produit_id, "jours_couverture": jours_couverture, "niveau_alerte": niveau}
