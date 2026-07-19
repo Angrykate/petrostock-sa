@@ -309,6 +309,8 @@ export default function Administration() {
                           </button>
                           {u.id !== 'U8' && (
                             <button onClick={() => {
+                              const ok = window.confirm(`Confirmer la suppression de l\'utilisateur ${u.name} (${u.email}) ?`)
+                              if (!ok) return
                               const next = users.filter(item => item.id !== u.id)
                               setUsers(next)
                               saveUsers(next)

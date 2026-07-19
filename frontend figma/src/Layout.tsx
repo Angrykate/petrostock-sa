@@ -17,6 +17,7 @@ interface LayoutProps {
   notifications: Array<{ id: string; title: string; subtitle: string; badge: string; timestamp: string; severity: string }>
   notificationsOpen: boolean
   onToggleNotifications: () => void
+  onDismissNotification?: (id: string) => void
 }
 
 const PAGE_META: Record<Page, { label: string; icon: typeof LayoutDashboard }> = {
@@ -190,7 +191,7 @@ export default function Layout({ user, currentPage, onNavigate, onLogout, childr
                     {notifications.length === 0 ? (
                       <div className="px-4 py-5 text-sm text-center" style={{ color: '#718096' }}>Aucune notification récente.</div>
                     ) : notifications.map(note => (
-                      <div key={note.id} className="px-4 py-3 border-b last:border-0" style={{ borderColor: '#1c2540' }}>
+                      <div key={note.id} className="px-4 py-3 border-b last:border-0 cursor-pointer" style={{ borderColor: '#1c2540' }} onClick={() => onDismissNotification && onDismissNotification(note.id)}>
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-mono text-[11px] uppercase tracking-[0.18em]" style={{ color: '#4a5568' }}>{note.badge}</span>
                           <span className="font-mono text-[11px]" style={{ color: '#718096' }}>{note.timestamp.split(' ')[0]}</span>

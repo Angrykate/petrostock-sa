@@ -101,3 +101,11 @@ export function loadSession(): SessionState {
 export function saveSession(session: SessionState) {
   writeStorage('petrostock.session', session)
 }
+
+export function loadDismissedNotifications(): string[] {
+  return readStorage<string[]>('petrostock.dismissed-notifications', [])
+}
+
+export function saveDismissedNotifications(ids: string[]) {
+  writeStorage('petrostock.dismissed-notifications', ids)
+}

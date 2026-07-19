@@ -31,11 +31,13 @@ function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; us
   const [form, setForm] = useState({
     depotId: user.depotId ?? 'D1',
     type: '',
+    customType: '',
     description: '',
   })
   const [touched, setTouched] = useState(false)
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
-  const isValid = form.type.trim() !== '' && form.description.trim() !== ''
+  const selectedType = form.type === 'Autre' ? form.customType.trim() : form.type.trim()
+  const isValid = selectedType !== '' && form.description.trim() !== ''
 
   const inputCls: React.CSSProperties = {
     background: '#060912', border: '1px solid #1c2540', color: '#e2e8f0',
@@ -46,12 +48,13 @@ function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; us
   function handleCreate() {
     setTouched(true)
     if (!isValid) return
-    const severity: Incident['severity'] = form.type.toLowerCase().includes('fuite') ? 'eleve' : form.type.toLowerCase().includes('panne') ? 'critique' : 'modere'
+    const t = selectedType.toLowerCase()
+    const severity: Incident['severity'] = t.includes('fuite') ? 'eleve' : t.includes('panne') ? 'critique' : 'modere'
     const newIncident: Incident = {
       id: `I${incidentSeq}`,
       ref: `INC-2024-0${159 + incidentSeq}`,
       depotId: form.depotId,
-      type: form.type.trim(),
+      type: selectedType,
       severity,
       description: form.description.trim(),
       date: new Date().toISOString().slice(0, 16).replace('T', ' '),
@@ -87,17 +90,18 @@ function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; us
               </select>
             </div>
             <div>
-              <label className="font-mono text-xs uppercase tracking-widest mb-1.5 block" style={{ color: '#4a5568' }}>Classification IA</label>
-              <div className="rounded-lg border px-3 py-2 text-sm" style={{ background: '#060912', borderColor: '#1c2540', color: '#e8a020' }}>
-                Gravité déterminée automatiquement à la soumission
-              </div>
+              <label className="font-mono text-xs uppercase tracking-widest mb-1.5 block" style={{ color: '#4a5568' }}>Type d'incident</label>
+              <select value={form.type} onChange={e => set('type', e.target.value)} style={{ ...inputCls, appearance: 'none' }}>
+                <option value="">Sélectionner un type</option>
+                <option value="Fuite">Fuite</option>
+                <option value="Panne">Panne</option>
+                <option value="Anomalie stock">Anomalie stock</option>
+                <option value="Autre">Autre</option>
+              </select>
+              {form.type === 'Autre' && (
+                <input value={form.customType} onChange={e => set('customType', e.target.value)} placeholder="Précisez le type..." style={{ ...inputCls, marginTop: 8 }} />
+              )}
             </div>
-          </div>
-          <div>
-            <label className="font-mono text-xs uppercase tracking-widest mb-1.5 block" style={{ color: '#4a5568' }}>Type d'incident</label>
-            <input value={form.type} onChange={e => set('type', e.target.value)}
-              placeholder="ex: Fuite, Panne, Anomalie stock..."
-              style={{ ...inputCls, borderColor: touched && !form.type.trim() ? '#e53e3e' : '#1c2540' }} />
           </div>
           <div>
             <label className="font-mono text-xs uppercase tracking-widest mb-1.5 block" style={{ color: '#4a5568' }}>Description</label>
@@ -105,6 +109,7 @@ function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; us
               placeholder="Description détaillée de l'incident..."
               rows={4} style={{ ...inputCls, resize: 'none', borderColor: touched && !form.description.trim() ? '#e53e3e' : '#1c2540' }} />
           </div>
+          
           {touched && !isValid && (
             <p className="text-xs" style={{ color: '#e53e3e' }}>Le type et la description sont obligatoires.</p>
           )}

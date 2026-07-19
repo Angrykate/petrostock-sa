@@ -17,10 +17,10 @@ const STATUS_META: Record<Order['status'], { label: string; color: string }> = {
 
 let orderSeq = ORDERS.length + 1
 
-function Modal({ onClose, user, onCreate }: { onClose: () => void; user: AuthUser; onCreate: (o: Order) => void }) {
+function Modal({ onClose, user, onCreate, initial }: { onClose: () => void; user: AuthUser; onCreate: (o: Order) => void; initial?: Partial<{ productId: string; depotId: string; quantity: number }> }) {
   const [form, setForm] = useState({
-    productId: 'P1', depotId: user.depotId ?? 'D1', supplierId: 'S1',
-    quantity: '', note: ''
+    productId: initial?.productId ?? 'P1', depotId: initial?.depotId ?? user.depotId ?? 'D1', supplierId: 'S1',
+    quantity: initial?.quantity ? String(initial.quantity) : '', note: ''
   })
   const recommendedSupplier = useMemo(() => {
     const filtered = SUPPLIERS.filter(s => s.products.includes(form.productId))
@@ -130,12 +130,13 @@ function Modal({ onClose, user, onCreate }: { onClose: () => void; user: AuthUse
   )
 }
 
-export default function Commandes({ user }: { user: AuthUser }) {
+export default function Commandes({ user, draft: externalDraft, onClearDraft }: { user: AuthUser; draft?: any | null; onClearDraft?: () => void }) {
   const { push } = useToast()
   const [allOrders, setAllOrders] = useState<Order[]>(() => loadOrders())
   const [stocks, setStocks] = useState<StockEntry[]>(() => loadStocks())
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
+  const [draft, setDraft] = useState<any | null>(null)
   const canCreate = ['depot', 'achat', 'admin'].includes(user.role)
   const canApprove = ['achat', 'admin'].includes(user.role)
   const isReadOnly = user.role === 'direction'
@@ -144,6 +145,29 @@ export default function Commandes({ user }: { user: AuthUser }) {
     const handler = () => setStocks(loadStocks())
     window.addEventListener('petrostock-storage-update', handler)
     return () => window.removeEventListener('petrostock-storage-update', handler)
+  }, [])
+
+  useEffect(() => {
+    if (externalDraft) {
+      setDraft(externalDraft)
+      setShowModal(true)
+      if (onClearDraft) onClearDraft()
+    }
+  }, [externalDraft, onClearDraft])
+
+  useEffect(() => {
+    // listen for programmatic drafts written to window (optional)
+    const handler = (e: any) => {
+      try {
+        const ce = e as CustomEvent
+        if (ce?.detail?.type === 'create-order' && ce.detail.payload) {
+          setDraft(ce.detail.payload)
+          setShowModal(true)
+        }
+      } catch (err) {}
+    }
+    window.addEventListener('petrostock-create-order', handler as EventListener)
+    return () => window.removeEventListener('petrostock-create-order', handler as EventListener)
   }, [])
 
   const orders = useMemo(() => allOrders.filter(o => {
@@ -187,7 +211,7 @@ export default function Commandes({ user }: { user: AuthUser }) {
   return (
     <div className="space-y-5 animate-fade-in">
       {showModal && (
-        <Modal user={user} onClose={() => setShowModal(false)}
+        <Modal user={user} onClose={() => { setShowModal(false); setDraft(null) }} initial={draft ?? undefined}
           onCreate={order => { setAllOrders(list => { const next = [order, ...list]; saveOrders(next); return next }) ; push(`Commande ${order.ref} créée en brouillon.`) }} />
       )}
 

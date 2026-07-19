@@ -185,7 +185,13 @@ export default function Stocks({ user }: { user: AuthUser }) {
                       <td className="px-4 py-3">
                         {alert !== 'ok' && (
                           <button
-                            onClick={() => push(`Commande suggérée pour ${getProductName(s.productId)} · ${getDepotName(s.depotId)}.`)}
+                            onClick={() => {
+                              const suggested = Math.max(1000, Math.ceil((s.capacity - s.current) / 1000) * 1000)
+                              try {
+                                window.dispatchEvent(new CustomEvent('petrostock-create-order', { detail: { type: 'create-order', payload: { productId: s.productId, depotId: s.depotId, quantity: suggested } } }))
+                              } catch (e) {}
+                              push(`Préparation d'une commande pour ${getProductName(s.productId)} · ${getDepotName(s.depotId)}.`)
+                            }}
                             className="font-mono text-xs px-3 py-1 rounded border transition-colors hover:bg-white/5"
                             style={{ borderColor: '#e8a020', color: '#e8a020', background: 'rgba(232,160,32,0.08)' }}>
                             Commander

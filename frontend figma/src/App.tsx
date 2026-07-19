@@ -12,7 +12,7 @@ import Administration from './pages/Administration'
 import { Lock } from 'lucide-react'
 import type { AuthUser, Page, Role } from './data'
 import { ROLE_PAGES, getDepotName, getProductName, getStockAlert } from './data'
-import { loadSession, saveSession, loadStocks, loadOrders, loadIncidents } from './lib/storage'
+import { loadSession, saveSession, loadStocks, loadOrders, loadIncidents, loadDismissedNotifications, saveDismissedNotifications } from './lib/storage'
 
 interface AppNotification {
   id: string
@@ -42,14 +42,14 @@ function AccessDenied() {
   )
 }
 
-function PageRouter({ page, user }: { page: Page; user: AuthUser }) {
+function PageRouter({ page, user, orderDraft, clearDraft }: { page: Page; user: AuthUser; orderDraft?: any | null; clearDraft?: () => void }) {
   const allowed = ROLE_PAGES[user.role].includes(page)
   if (!allowed) return <AccessDenied />
 
   switch (page) {
     case 'dashboard':    return <Dashboard user={user} />
     case 'stocks':       return <Stocks user={user} />
-    case 'commandes':    return <Commandes user={user} />
+    case 'commandes':    return <Commandes user={user} draft={orderDraft} onClearDraft={clearDraft} />
     case 'incidents':    return <Incidents user={user} />
     case 'previsions':   return <Previsions />
     case 'fournisseurs': return <Fournisseurs />
@@ -67,21 +67,36 @@ export default function App() {
   const [stocks, setStocks] = useState(() => loadStocks())
   const [orders, setOrders] = useState(() => loadOrders())
   const [incidents, setIncidents] = useState(() => loadIncidents())
+  const [dismissed, setDismissed] = useState<string[]>(() => loadDismissedNotifications())
+  const [orderDraft, setOrderDraft] = useState<any | null>(null)
 
   useEffect(() => {
     const handler = () => {
       setStocks(loadStocks())
       setOrders(loadOrders())
       setIncidents(loadIncidents())
+      setDismissed(loadDismissedNotifications())
     }
     window.addEventListener('petrostock-storage-update', handler)
+    const ev = (e: Event) => {
+      try {
+        // support programmatic create-order events: CustomEvent with detail { type: 'create-order', payload }
+        const ce = e as CustomEvent
+        if (ce?.detail?.type === 'create-order') {
+          setOrderDraft(ce.detail.payload)
+          setCurrentPage('commandes')
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    window.addEventListener('petrostock-create-order', ev as EventListener)
     return () => window.removeEventListener('petrostock-storage-update', handler)
   }, [])
 
   const notifications = useMemo<AppNotification[]>(() => {
     const list: AppNotification[] = []
     const stockAlerts = stocks.filter(s => getStockAlert(s) !== 'ok')
-      .filter(s => !user || user.role !== 'depot' || s.depotId === user.depotId)
 
     stockAlerts.forEach(s => {
       const alert = getStockAlert(s)
@@ -97,9 +112,7 @@ export default function App() {
       })
     })
 
-    incidents.filter(i => i.status !== 'resolu')
-      .filter(i => !user || user.role !== 'depot' || i.depotId === user.depotId)
-      .forEach(i => {
+    incidents.filter(i => i.status !== 'resolu').forEach(i => {
         list.push({
           id: `incident-${i.id}`,
           title: `${i.ref} · ${i.type}`,
@@ -123,8 +136,11 @@ export default function App() {
       })
     }
 
-    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-  }, [user])
+    // remove dismissed
+    const filtered = list.filter(n => !dismissed.includes(n.id))
+    return filtered.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  }, [user, stocks, orders, incidents, dismissed])
+  
 
   useEffect(() => {
     setUnreadCount(notifications.length)
@@ -166,6 +182,12 @@ export default function App() {
     setCurrentPage('dashboard')
   }
 
+  function handleDismissNotification(id: string) {
+    const next = Array.from(new Set([...dismissed, id]))
+    setDismissed(next)
+    saveDismissedNotifications(next)
+  }
+
   if (!user) return <Login onLogin={handleLogin} />
 
   return (
@@ -177,8 +199,9 @@ export default function App() {
       alertCount={unreadCount}
       notifications={notifications}
       notificationsOpen={notificationsOpen}
-      onToggleNotifications={handleToggleNotifications}>
-      <PageRouter page={currentPage} user={user} />
+      onToggleNotifications={handleToggleNotifications}
+      onDismissNotification={handleDismissNotification}>
+      <PageRouter page={currentPage} user={user} orderDraft={orderDraft} clearDraft={() => setOrderDraft(null)} />
     </Layout>
   )
 }
