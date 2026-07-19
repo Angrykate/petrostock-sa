@@ -37,8 +37,17 @@ env/
 node_modules/
 .next/
 out/
+frontend/
+frontend_v3/
 frontend/.next/
 frontend/node_modules/
+frontend_v3/.next/
+frontend_v3/node_modules/
+frontend_v3/.turbo/
+frontend figma/node_modules/
+frontend figma/dist/
+frontend figma/.vite/
+frontend figma/.next/
 
 # ── Base de données locale ─────────────────────────────────────────────────────
 *.sqlite
