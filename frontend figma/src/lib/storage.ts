@@ -1,5 +1,5 @@
-import type { Incident, Order, Role, SystemUser } from '../data'
-import { INCIDENTS, ORDERS, SYSTEM_USERS } from '../data'
+import type { Incident, Order, Role, SystemUser, StockEntry } from '../data'
+import { INCIDENTS, ORDERS, STOCKS, SYSTEM_USERS } from '../data'
 
 export interface SessionState {
   user: {
@@ -19,6 +19,7 @@ export interface AuthCredential {
   password: string
   role: Role
   depotId?: string
+  active?: boolean
 }
 
 function readStorage<T>(key: string, fallback: T): T {
@@ -34,6 +35,7 @@ function readStorage<T>(key: string, fallback: T): T {
 function writeStorage<T>(key: string, value: T) {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(key, JSON.stringify(value))
+  window.dispatchEvent(new Event('petrostock-storage-update'))
 }
 
 export function loadOrders(): Order[] {
@@ -42,6 +44,14 @@ export function loadOrders(): Order[] {
 
 export function saveOrders(orders: Order[]) {
   writeStorage('petrostock.orders', orders)
+}
+
+export function loadStocks(): StockEntry[] {
+  return readStorage<StockEntry[]>('petrostock.stocks', STOCKS)
+}
+
+export function saveStocks(stocks: StockEntry[]) {
+  writeStorage('petrostock.stocks', stocks)
 }
 
 export function loadIncidents(): Incident[] {

@@ -1,17 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts'
 import { AlertTriangle, TrendingUp, TrendingDown, Package, ShoppingCart, Zap, DollarSign, Users, Activity, CheckCircle } from 'lucide-react'
-import type { AuthUser, Order } from './data'
+import type { AuthUser, Order, StockEntry, Incident } from './data'
 import {
-  STOCKS, ORDERS, INCIDENTS, MONTHLY_REVENUE, STOCK_HISTORY_30D,
-  DEPOT_FILL_RATES, INCIDENT_BY_SEVERITY,
+  STOCK_HISTORY_30D,
+  MONTHLY_REVENUE,
+  DEPOT_FILL_RATES,
+  INCIDENTS,
+  INCIDENT_BY_SEVERITY,
   getProductName, getDepotName, getSupplierName,
   fmt, getStockAlert
 } from './data'
 import { useToast } from './lib/toast'
+import { loadStocks, loadOrders, loadIncidents } from './lib/storage'
 
 interface KpiCardProps {
   label: string
@@ -84,10 +88,10 @@ function AlertRow({ alert }: { alert: typeof INCIDENTS[0] }) {
 
 // ─── ROLE DASHBOARDS ─────────────────────────────────────────────────────────
 
-function DepotDashboard({ user }: { user: AuthUser }) {
-  const depotStocks = STOCKS.filter(s => s.depotId === user.depotId)
-  const depotOrders = ORDERS.filter(o => o.depotId === user.depotId)
-  const depotIncidents = INCIDENTS.filter(i => i.depotId === user.depotId)
+function DepotDashboard({ user, stocks, orders, incidents }: { user: AuthUser; stocks: StockEntry[]; orders: Order[]; incidents: Incident[] }) {
+  const depotStocks = stocks.filter(s => s.depotId === user.depotId)
+  const depotOrders = orders.filter(o => o.depotId === user.depotId)
+  const depotIncidents = incidents.filter(i => i.depotId === user.depotId)
   const alerts = depotStocks.filter(s => getStockAlert(s) !== 'ok')
   const totalStock = depotStocks.reduce((a, s) => a + s.current, 0)
   const activeOrders = depotOrders.filter(o => ['approuvee','en_transit','envoyee'].includes(o.status))
@@ -205,13 +209,13 @@ function DepotDashboard({ user }: { user: AuthUser }) {
   )
 }
 
-function AchatDashboard() {
+function AchatDashboard({ orders }: { orders: Order[] }) {
   const { push } = useToast()
-  const [orders, setOrders] = useState(ORDERS)
-  const pendingOrders = orders.filter(o => o.status === 'envoyee')
-  const approvedOrders = orders.filter(o => o.status === 'approuvee')
-  const inTransit = orders.filter(o => o.status === 'en_transit')
-  const totalValue = orders.filter(o => !['livree','annulee'].includes(o.status)).reduce((a, o) => a + o.amountFCFA, 0)
+  const [currentOrders, setCurrentOrders] = useState(orders)
+  const pendingOrders = currentOrders.filter(o => o.status === 'envoyee')
+  const approvedOrders = currentOrders.filter(o => o.status === 'approuvee')
+  const inTransit = currentOrders.filter(o => o.status === 'en_transit')
+  const totalValue = currentOrders.filter(o => !['livree','annulee'].includes(o.status)).reduce((a, o) => a + o.amountFCFA, 0)
 
   function updateOrder(id: string, status: Order['status'], msg: string) {
     setOrders(list => list.map(o => o.id === id ? { ...o, status } : o))
@@ -310,12 +314,20 @@ function AchatDashboard() {
   )
 }
 
-function DirectionDashboard() {
-  const totalStock = STOCKS.reduce((a, s) => a + s.current, 0)
-  const criticalAlerts = STOCKS.filter(s => getStockAlert(s) === 'critical').length
-  const monthlyCA = MONTHLY_REVENUE[MONTHLY_REVENUE.length - 1].revenue
-  const openIncidents = INCIDENTS.filter(i => i.status !== 'resolu').length
-  const avgFill = Math.round(DEPOT_FILL_RATES.reduce((a, d) => a + d.rate, 0) / DEPOT_FILL_RATES.length)
+function DirectionDashboard({ stocks, incidents }: { stocks: StockEntry[]; incidents: Incident[] }) {
+  const totalStock = stocks.reduce((a, s) => a + s.current, 0)
+  const criticalAlerts = stocks.filter(s => getStockAlert(s) === 'critical').length
+  const monthlyCA = 1760
+  const openIncidents = incidents.filter(i => i.status !== 'resolu').length
+  const depotFillRates = stocks.map(depot => ({
+    name: depot.depotId,
+    rate: Math.round((depot.current / depot.capacity) * 100),
+    city: getDepotName(depot.depotId).replace('Dépôt ', ''),
+  })).reduce((acc, entry) => {
+    const existing = acc.find(item => item.name === entry.name)
+    return existing ? acc : [...acc, entry]
+  }, [] as { name: string; rate: number; city: string }[])
+  const avgFill = Math.round(depotFillRates.reduce((a, d) => a + d.rate, 0) / Math.max(depotFillRates.length, 1))
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -391,8 +403,8 @@ function DirectionDashboard() {
       {/* Incidents récents */}
       <div className="rounded-xl border p-5" style={{ background: '#0c1121', borderColor: '#1c2540' }}>
         <SectionTitle>Incidents récents</SectionTitle>
-        <div className="divide-y" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
-          {INCIDENTS.slice(0, 5).map(i => <AlertRow key={i.id} alert={i} />)}
+        <div className="divide-y max-h-[320px] overflow-y-auto" style={{ '--tw-divide-opacity': 1 } as React.CSSProperties}>
+          {incidents.slice(0, 5).map(i => <AlertRow key={i.id} alert={i} />)}
         </div>
       </div>
     </div>
@@ -464,8 +476,22 @@ function AdminDashboard() {
 }
 
 export default function Dashboard({ user }: { user: AuthUser }) {
-  if (user.role === 'depot') return <DepotDashboard user={user} />
-  if (user.role === 'achat') return <AchatDashboard />
-  if (user.role === 'direction') return <DirectionDashboard />
+  const [stocks, setStocks] = useState<StockEntry[]>(() => loadStocks())
+  const [orders, setOrders] = useState<Order[]>(() => loadOrders())
+  const [incidents, setIncidents] = useState<Incident[]>(() => loadIncidents())
+
+  useEffect(() => {
+    const handler = () => {
+      setStocks(loadStocks())
+      setOrders(loadOrders())
+      setIncidents(loadIncidents())
+    }
+    window.addEventListener('petrostock-storage-update', handler)
+    return () => window.removeEventListener('petrostock-storage-update', handler)
+  }, [])
+
+  if (user.role === 'depot') return <DepotDashboard user={user} stocks={stocks} orders={orders} incidents={incidents} />
+  if (user.role === 'achat') return <AchatDashboard orders={orders} />
+  if (user.role === 'direction') return <DirectionDashboard stocks={stocks} incidents={incidents} />
   return <AdminDashboard />
 }

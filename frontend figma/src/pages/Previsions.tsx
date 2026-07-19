@@ -5,12 +5,11 @@ import {
 import { Brain, TrendingDown, AlertTriangle } from 'lucide-react'
 import { DEMAND_FORECAST, STOCKS, DEPOTS, PRODUCTS, getStockAlert } from '../data'
 
-const ALGO_OPTIONS = ['Prophet (FB)', 'LSTM', 'ARIMA', 'XGBoost']
-
 export default function Previsions() {
   const [selectedDepot, setSelectedDepot] = useState('D2')
   const [selectedProduct, setSelectedProduct] = useState('P1')
-  const [algo, setAlgo] = useState('Prophet (FB)')
+
+  const algo = 'Prophet'
 
   const criticalStocks = STOCKS.filter(s => getStockAlert(s) === 'critical')
   const selectedStock = STOCKS.find(s => s.depotId === selectedDepot && s.productId === selectedProduct)
@@ -45,7 +44,7 @@ export default function Previsions() {
             MOTEUR IA · PRÉVISION DE LA DEMANDE
           </div>
           <div className="font-mono text-xs mt-0.5" style={{ color: '#4a5568' }}>
-            Modèles: Prophet · ARIMA · LSTM · XGBoost — Données 2015–2024 (321 464 observations)
+            Modèle fixe: Prophet — Données 2015–2024 (321 464 observations)
           </div>
         </div>
         <div className="ml-auto text-right shrink-0">
@@ -100,10 +99,10 @@ export default function Previsions() {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs uppercase tracking-widest" style={{ color: '#4a5568' }}>Modèle</span>
-          <select value={algo} onChange={e => setAlgo(e.target.value)} style={SelectStyle}>
-            {ALGO_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+          <span className="font-mono text-xs uppercase tracking-widest" style={{ color: '#4a5568' }}>Modèle IA</span>
+          <div className="px-3 py-2 rounded-lg" style={{ background: '#0b1321', border: '1px solid #1c2540', color: '#e2e8f0', fontSize: 13, fontFamily: "'JetBrains Mono', monospace" }}>
+            {algo}
+          </div>
         </div>
       </div>
 

@@ -141,6 +141,13 @@ export const DEMO_USERS: Record<Role, AuthUser> = {
   admin: { id: 'U8', name: 'Admin Système', email: 'admin@petrostock.tg', role: 'admin', avatar: 'AS' },
 }
 
+export const DEMO_CREDS: Record<Role, { email: string; pass: string }> = {
+  depot:     { email: 'k.asante@petrostock.tg', pass: 'depot2024' },
+  achat:     { email: 'y.dossou@petrostock.tg', pass: 'achat2024' },
+  direction: { email: 's.koffi@petrostock.tg',  pass: 'dir2024' },
+  admin:     { email: 'admin@petrostock.tg',     pass: 'admin2024' },
+}
+
 export const SYSTEM_USERS: SystemUser[] = [
   { id: 'U1', name: 'Kwame Asante', email: 'k.asante@petrostock.tg', role: 'depot', depotId: 'D1', active: true, lastLogin: '2024-07-19 08:12', avatar: 'KA' },
   { id: 'U2', name: 'Afi Mensah', email: 'a.mensah@petrostock.tg', role: 'depot', depotId: 'D2', active: true, lastLogin: '2024-07-19 07:45', avatar: 'AM' },
@@ -275,8 +282,8 @@ export const INCIDENT_BY_SEVERITY = [
 export const ROLE_PAGES: Record<Role, Page[]> = {
   depot: ['dashboard', 'stocks', 'commandes', 'incidents', 'previsions'],
   achat: ['dashboard', 'commandes', 'fournisseurs', 'previsions'],
-  direction: ['dashboard', 'stocks', 'ventes', 'previsions', 'incidents'],
-  admin: ['dashboard', 'stocks', 'commandes', 'fournisseurs', 'ventes', 'incidents', 'previsions', 'administration'],
+  direction: ['dashboard', 'stocks', 'ventes', 'previsions', 'incidents', 'fournisseurs'],
+  admin: ['dashboard', 'administration'],
 }
 
 export const ROLE_LABELS: Record<Role, string> = {

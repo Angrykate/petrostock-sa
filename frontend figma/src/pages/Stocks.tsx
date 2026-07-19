@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Search, Filter, Eye } from 'lucide-react'
-import type { AuthUser } from '../data'
-import { STOCKS, DEPOTS, PRODUCTS, getProductName, getDepotName, fmt, getStockAlert } from '../data'
+import type { AuthUser, StockEntry } from '../data'
+import { DEPOTS, PRODUCTS, getProductName, getDepotName, fmt, getStockAlert } from '../data'
 import { useToast } from '../lib/toast'
+import { loadStocks } from '../lib/storage'
 import { EmptyState } from '../components/ui'
 
 export default function Stocks({ user }: { user: AuthUser }) {
@@ -10,9 +11,16 @@ export default function Stocks({ user }: { user: AuthUser }) {
   const [depotFilter, setDepotFilter] = useState<string>('all')
   const [productFilter, setProductFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
+  const [stocks, setStocks] = useState<StockEntry[]>(() => loadStocks())
   const readOnly = user.role === 'direction'
 
-  const entries = STOCKS.filter(s => {
+  useEffect(() => {
+    const handler = () => setStocks(loadStocks())
+    window.addEventListener('petrostock-storage-update', handler)
+    return () => window.removeEventListener('petrostock-storage-update', handler)
+  }, [])
+
+  const entries = stocks.filter(s => {
     if (user.role === 'depot' && s.depotId !== user.depotId) return false
     if (depotFilter !== 'all' && s.depotId !== depotFilter) return false
     if (productFilter !== 'all' && s.productId !== productFilter) return false
@@ -26,6 +34,7 @@ export default function Stocks({ user }: { user: AuthUser }) {
 
   const critCount = entries.filter(s => getStockAlert(s) === 'critical').length
   const warnCount = entries.filter(s => getStockAlert(s) === 'warning').length
+  const topCritical = entries.find(s => getStockAlert(s) === 'critical')
 
   const SelectStyle: React.CSSProperties = {
     background: '#0c1121', border: '1px solid #1c2540', color: '#e2e8f0',
@@ -63,6 +72,41 @@ export default function Stocks({ user }: { user: AuthUser }) {
           </div>
         )}
       </div>
+
+      {topCritical ? (
+        <div className="rounded-xl border p-5" style={{ background: 'rgba(229,62,62,0.08)', borderColor: 'rgba(229,62,62,0.2)' }}>
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div className="font-display text-lg font-bold text-white">Alerte critique</div>
+              <div className="font-mono text-xs mt-1" style={{ color: '#f8c0c0' }}>
+                {getProductName(topCritical.productId)} au dépôt {getDepotName(topCritical.depotId)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-xs uppercase tracking-widest" style={{ color: '#f8c0c0' }}>Rupture estimée</div>
+              <div className="font-display text-3xl font-bold" style={{ color: '#e53e3e' }}>
+                J+{topCritical.daysToStockout}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="flex items-center gap-2 font-mono text-xs text-white mb-2">
+              <span>Taux de remplissage</span>
+              <span className="font-bold">{Math.round((topCritical.current / topCritical.capacity) * 100)}%</span>
+            </div>
+            <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: '#1c2540' }}>
+              <div className="h-full rounded-full" style={{ width: `${Math.round((topCritical.current / topCritical.capacity) * 100)}%`, background: '#e53e3e' }} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border p-5" style={{ background: '#0c1121', borderColor: '#1c2540' }}>
+          <div className="font-display text-lg font-bold text-white">Tous les stocks sont stables</div>
+          <div className="font-mono text-xs mt-1" style={{ color: '#4a5568' }}>
+            Aucune rupture critique détectée sur les dépôts visibles.
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

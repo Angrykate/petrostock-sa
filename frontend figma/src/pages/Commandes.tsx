@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import type { AuthUser, Order } from '../data'
+import type { AuthUser, Order, StockEntry } from '../data'
 import { ORDERS, PRODUCTS, DEPOTS, SUPPLIERS, getProductName, getDepotName, getSupplierName, fmt, getProductUnitPrice, getSupplierRecommendationScore } from '../data'
 import { Button, EmptyState } from '../components/ui'
 import { useToast } from '../lib/toast'
-import { loadOrders, saveOrders } from '../lib/storage'
+import { loadOrders, saveOrders, loadStocks, saveStocks } from '../lib/storage'
 
 const STATUS_META: Record<Order['status'], { label: string; color: string }> = {
   brouillon:  { label: 'Brouillon',   color: '#4a5568' },
@@ -133,11 +133,18 @@ function Modal({ onClose, user, onCreate }: { onClose: () => void; user: AuthUse
 export default function Commandes({ user }: { user: AuthUser }) {
   const { push } = useToast()
   const [allOrders, setAllOrders] = useState<Order[]>(() => loadOrders())
+  const [stocks, setStocks] = useState<StockEntry[]>(() => loadStocks())
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
   const canCreate = ['depot', 'achat', 'admin'].includes(user.role)
   const canApprove = ['achat', 'admin'].includes(user.role)
   const isReadOnly = user.role === 'direction'
+
+  useEffect(() => {
+    const handler = () => setStocks(loadStocks())
+    window.addEventListener('petrostock-storage-update', handler)
+    return () => window.removeEventListener('petrostock-storage-update', handler)
+  }, [])
 
   const orders = useMemo(() => allOrders.filter(o => {
     if (user.role === 'depot' && o.depotId !== user.depotId) return false
@@ -150,11 +157,30 @@ export default function Commandes({ user }: { user: AuthUser }) {
   })).filter(s => s.count > 0)
 
   function updateStatus(id: string, status: Order['status'], message: string) {
+    const order = allOrders.find(o => o.id === id)
+    if (!order) return
+
     setAllOrders(list => {
       const next = list.map(o => o.id === id ? { ...o, status } : o)
       saveOrders(next)
       return next
     })
+
+    if (status === 'livree' && order.status !== 'livree') {
+      setStocks(prev => {
+        const nextStocks = prev.map(s => {
+          if (s.depotId !== order.depotId || s.productId !== order.productId) return s
+          return {
+            ...s,
+            current: Math.min(s.capacity, s.current + order.quantity),
+            lastUpdate: new Date().toISOString().slice(0, 10),
+          }
+        })
+        saveStocks(nextStocks)
+        return nextStocks
+      })
+    }
+
     push(message, status === 'annulee' ? 'error' : 'success')
   }
 

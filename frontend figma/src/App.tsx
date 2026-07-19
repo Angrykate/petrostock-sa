@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Login from './Login'
 import Layout from './Layout'
 import Dashboard from './Dashboard'
@@ -11,10 +11,17 @@ import Ventes from './pages/Ventes'
 import Administration from './pages/Administration'
 import { Lock } from 'lucide-react'
 import type { AuthUser, Page, Role } from './data'
-import { DEMO_USERS, ROLE_PAGES, STOCKS, getStockAlert } from './data'
-import { loadSession, saveSession } from './lib/storage'
+import { ROLE_PAGES, getDepotName, getProductName, getStockAlert } from './data'
+import { loadSession, saveSession, loadStocks, loadOrders, loadIncidents } from './lib/storage'
 
-const ALERT_COUNT = STOCKS.filter(s => getStockAlert(s) !== 'ok').length
+interface AppNotification {
+  id: string
+  title: string
+  subtitle: string
+  badge: string
+  timestamp: string
+  severity: 'critical' | 'warning' | 'info' | 'normal'
+}
 
 function AccessDenied() {
   return (
@@ -55,12 +62,81 @@ function PageRouter({ page, user }: { page: Page; user: AuthUser }) {
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [currentPage, setCurrentPage] = useState<Page>('dashboard')
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [stocks, setStocks] = useState(() => loadStocks())
+  const [orders, setOrders] = useState(() => loadOrders())
+  const [incidents, setIncidents] = useState(() => loadIncidents())
+
+  useEffect(() => {
+    const handler = () => {
+      setStocks(loadStocks())
+      setOrders(loadOrders())
+      setIncidents(loadIncidents())
+    }
+    window.addEventListener('petrostock-storage-update', handler)
+    return () => window.removeEventListener('petrostock-storage-update', handler)
+  }, [])
+
+  const notifications = useMemo<AppNotification[]>(() => {
+    const list: AppNotification[] = []
+    const stockAlerts = stocks.filter(s => getStockAlert(s) !== 'ok')
+      .filter(s => !user || user.role !== 'depot' || s.depotId === user.depotId)
+
+    stockAlerts.forEach(s => {
+      const alert = getStockAlert(s)
+      list.push({
+        id: `stock-${s.depotId}-${s.productId}`,
+        title: `${getProductName(s.productId)} — ${getDepotName(s.depotId)}`,
+        subtitle: alert === 'critical'
+          ? `Rupture estimée J+${s.daysToStockout}`
+          : `Alerte ${alert}`,
+        badge: alert === 'critical' ? 'CRITIQUE' : 'ALERTE',
+        timestamp: s.lastUpdate,
+        severity: alert === 'critical' ? 'critical' : 'warning',
+      })
+    })
+
+    incidents.filter(i => i.status !== 'resolu')
+      .filter(i => !user || user.role !== 'depot' || i.depotId === user.depotId)
+      .forEach(i => {
+        list.push({
+          id: `incident-${i.id}`,
+          title: `${i.ref} · ${i.type}`,
+          subtitle: `${getDepotName(i.depotId)} — ${i.status}`,
+          badge: 'INCIDENT',
+          timestamp: i.date,
+          severity: i.severity === 'critique' ? 'critical' : 'warning',
+        })
+      })
+
+    if (user && ['achat', 'direction', 'admin'].includes(user.role)) {
+      orders.filter(o => ['envoyee', 'approuvee', 'en_transit'].includes(o.status)).forEach(o => {
+        list.push({
+          id: `order-${o.id}`,
+          title: `${o.ref} · ${getProductName(o.productId)}`,
+          subtitle: `${getDepotName(o.depotId)} — ${o.status}`,
+          badge: 'COMMANDE',
+          timestamp: o.expectedAt,
+          severity: 'info',
+        })
+      })
+    }
+
+    return list.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  }, [user])
+
+  useEffect(() => {
+    setUnreadCount(notifications.length)
+  }, [notifications.length])
 
   useEffect(() => {
     const session = loadSession()
     if (session.user) {
-      setUser(session.user as AuthUser)
-      setCurrentPage((session.currentPage as Page) ?? 'dashboard')
+      const user = session.user as AuthUser
+      setUser(user)
+      const page = (session.currentPage as Page) ?? 'dashboard'
+      setCurrentPage(ROLE_PAGES[user.role].includes(page) ? page : 'dashboard')
     }
   }, [])
 
@@ -72,8 +148,16 @@ export default function App() {
     saveSession({ user, currentPage })
   }, [user, currentPage])
 
-  function handleLogin(role: Role) {
-    setUser(DEMO_USERS[role])
+  function handleToggleNotifications() {
+    setNotificationsOpen(open => {
+      const next = !open
+      if (next) setUnreadCount(0)
+      return next
+    })
+  }
+
+  function handleLogin(user: AuthUser) {
+    setUser(user)
     setCurrentPage('dashboard')
   }
 
@@ -90,7 +174,10 @@ export default function App() {
       currentPage={currentPage}
       onNavigate={setCurrentPage}
       onLogout={handleLogout}
-      alertCount={ALERT_COUNT}>
+      alertCount={unreadCount}
+      notifications={notifications}
+      notificationsOpen={notificationsOpen}
+      onToggleNotifications={handleToggleNotifications}>
       <PageRouter page={currentPage} user={user} />
     </Layout>
   )

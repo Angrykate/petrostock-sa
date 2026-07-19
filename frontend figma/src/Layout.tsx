@@ -14,6 +14,9 @@ interface LayoutProps {
   onLogout: () => void
   children: React.ReactNode
   alertCount: number
+  notifications: Array<{ id: string; title: string; subtitle: string; badge: string; timestamp: string; severity: string }>
+  notificationsOpen: boolean
+  onToggleNotifications: () => void
 }
 
 const PAGE_META: Record<Page, { label: string; icon: typeof LayoutDashboard }> = {
@@ -29,7 +32,7 @@ const PAGE_META: Record<Page, { label: string; icon: typeof LayoutDashboard }> =
 
 const ALL_PAGES: Page[] = ['dashboard','stocks','commandes','incidents','previsions','fournisseurs','ventes','administration']
 
-export default function Layout({ user, currentPage, onNavigate, onLogout, children, alertCount }: LayoutProps) {
+export default function Layout({ user, currentPage, onNavigate, onLogout, children, alertCount, notifications, notificationsOpen, onToggleNotifications }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const allowedPages = ROLE_PAGES[user.role]
@@ -86,7 +89,7 @@ export default function Layout({ user, currentPage, onNavigate, onLogout, childr
 
       {/* Nav */}
       <nav className="flex-1 flex flex-col gap-0.5 px-2 overflow-y-auto">
-        {ALL_PAGES.map(page => <NavItem key={page} page={page} />)}
+        {ALL_PAGES.filter(page => allowedPages.includes(page)).map(page => <NavItem key={page} page={page} />)}
       </nav>
 
       {/* User section */}
@@ -166,16 +169,40 @@ export default function Layout({ user, currentPage, onNavigate, onLogout, childr
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="relative w-9 h-9 flex items-center justify-center rounded-lg border transition-colors hover:bg-white/5"
-              style={{ borderColor: '#1c2540', color: '#718096' }}>
-              <Bell size={17} />
-              {alertCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-black text-[10px] font-bold flex items-center justify-center font-mono"
-                  style={{ background: '#e53e3e' }}>
-                  {alertCount > 9 ? '9+' : alertCount}
-                </span>
+            <div className="relative">
+              <button onClick={onToggleNotifications} className="relative w-9 h-9 flex items-center justify-center rounded-lg border transition-colors hover:bg-white/5"
+                style={{ borderColor: '#1c2540', color: '#718096' }}>
+                <Bell size={17} />
+                {alertCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-black text-[10px] font-bold flex items-center justify-center font-mono"
+                    style={{ background: '#e53e3e' }}>
+                    {alertCount > 9 ? '9+' : alertCount}
+                  </span>
+                )}
+              </button>
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-2 w-80 rounded-2xl border bg-[#090d15] shadow-2xl" style={{ borderColor: '#1c2540' }}>
+                  <div className="px-4 py-3 border-b" style={{ borderColor: '#1c2540' }}>
+                    <div className="font-display text-sm font-bold text-white">Notifications</div>
+                    <div className="font-mono text-xs" style={{ color: '#718096' }}>{alertCount} nouvel{alertCount > 1 ? 'les' : 'le'} élément{alertCount > 1 ? 's' : ''}</div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-5 text-sm text-center" style={{ color: '#718096' }}>Aucune notification récente.</div>
+                    ) : notifications.map(note => (
+                      <div key={note.id} className="px-4 py-3 border-b last:border-0" style={{ borderColor: '#1c2540' }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-[11px] uppercase tracking-[0.18em]" style={{ color: '#4a5568' }}>{note.badge}</span>
+                          <span className="font-mono text-[11px]" style={{ color: '#718096' }}>{note.timestamp.split(' ')[0]}</span>
+                        </div>
+                        <div className="mt-2 font-medium text-sm text-white">{note.title}</div>
+                        <div className="mt-1 font-mono text-xs" style={{ color: '#94a3b8' }}>{note.subtitle}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-            </button>
+            </div>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border"
               style={{ borderColor: '#1c2540', background: '#0f1420' }}>
               <div className="w-6 h-6 rounded flex items-center justify-center font-mono text-xs font-bold"

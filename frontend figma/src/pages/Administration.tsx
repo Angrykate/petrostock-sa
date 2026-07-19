@@ -19,11 +19,29 @@ function RoleBadge({ role }: { role: Role }) {
   )
 }
 
-function NewUserModal({ onClose, onCreate }: { onClose: () => void; onCreate: (u: SystemUser) => void }) {
-  const [form, setForm] = useState({ name: '', email: '', role: 'depot' as Role, depotId: 'D1' })
+function UserModal({
+  onClose,
+  onSave,
+  initialUser,
+  initialPassword,
+}: {
+  onClose: () => void
+  onSave: (u: SystemUser, password?: string) => void
+  initialUser?: SystemUser
+  initialPassword?: string
+}) {
+  const [form, setForm] = useState({
+    name: initialUser?.name ?? '',
+    email: initialUser?.email ?? '',
+    role: initialUser?.role ?? 'depot' as Role,
+    depotId: initialUser?.depotId ?? 'D1',
+    password: initialPassword ?? '',
+  })
   const [touched, setTouched] = useState(false)
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
-  const isValid = form.name.trim() !== '' && /\S+@\S+\.\S+/.test(form.email)
+  const isNew = !initialUser
+  const passwordValid = isNew ? form.password.length >= 6 : form.password.length === 0 || form.password.length >= 6
+  const isValid = form.name.trim() !== '' && /\S+@\S+\.\S+/.test(form.email) && passwordValid
 
   const inputCls: React.CSSProperties = {
     background: '#060912', border: '1px solid #1c2540', color: '#e2e8f0',
@@ -36,21 +54,21 @@ function NewUserModal({ onClose, onCreate }: { onClose: () => void; onCreate: (u
     return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || '??'
   }
 
-  function handleCreate() {
+  function handleSave() {
     setTouched(true)
     if (!isValid) return
     const user: SystemUser = {
-      id: `U${userSeq}`,
+      id: initialUser?.id ?? `U${userSeq}`,
       name: form.name.trim(),
       email: form.email.trim(),
       role: form.role,
       depotId: form.role === 'depot' ? form.depotId : undefined,
-      active: true,
-      lastLogin: '—',
+      active: initialUser?.active ?? true,
+      lastLogin: initialUser?.lastLogin ?? '—',
       avatar: initials(form.name),
     }
-    userSeq += 1
-    onCreate(user)
+    if (!initialUser) userSeq += 1
+    onSave(user, form.password.trim() || undefined)
     onClose()
   }
 
@@ -61,7 +79,7 @@ function NewUserModal({ onClose, onCreate }: { onClose: () => void; onCreate: (u
         style={{ background: '#0c1121', borderColor: '#1c2540', zIndex: 1 }}>
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#1c2540' }}>
           <h2 className="font-display text-xl font-bold tracking-wide text-white" style={{ letterSpacing: '0.06em' }}>
-            CRÉER UN UTILISATEUR
+            {initialUser ? 'MODIFIER UN UTILISATEUR' : 'CRÉER UN UTILISATEUR'}
           </h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5"
             style={{ color: '#4a5568' }}>
@@ -95,13 +113,18 @@ function NewUserModal({ onClose, onCreate }: { onClose: () => void; onCreate: (u
               </div>
             )}
           </div>
+          <div>
+            <label className={labelCls} style={{ color: '#4a5568' }}>Mot de passe</label>
+            <input type="password" value={form.password} onChange={e => set('password', e.target.value)} placeholder="motdepasse123"
+              style={{ ...inputCls, borderColor: touched && form.password.length < 6 ? '#e53e3e' : '#1c2540' }} />
+          </div>
           {touched && !isValid && (
-            <p className="text-xs" style={{ color: '#e53e3e' }}>Un nom et un email valide sont requis.</p>
+            <p className="text-xs" style={{ color: '#e53e3e' }}>Un nom, un email valide et un mot de passe de 6 caractères minimum sont requis.</p>
           )}
         </div>
         <div className="flex gap-3 px-6 pb-6">
           <Button variant="outline" className="flex-1" onClick={onClose}>Annuler</Button>
-          <Button variant="danger" className="flex-1 text-base" onClick={handleCreate}>CRÉER</Button>
+          <Button variant="danger" className="flex-1 text-base" onClick={handleSave}>{initialUser ? 'ENREGISTRER' : 'CRÉER'}</Button>
         </div>
       </div>
     </div>
@@ -112,25 +135,35 @@ export default function Administration() {
   const { push } = useToast()
   const [activeTab, setActiveTab] = useState<'users' | 'config' | 'logs'>('users')
   const [users, setUsers] = useState<SystemUser[]>(() => loadUsers())
+  const [authUsers, setAuthUsers] = useState(() => loadAuthUsers())
   const [showModal, setShowModal] = useState(false)
+  const [editingUser, setEditingUser] = useState<SystemUser | null>(null)
   const [auditLog, setAuditLog] = useState(() => loadAuditLog())
-  const [persistedAuthUsers, setPersistedAuthUsers] = useState(() => loadAuthUsers())
 
   function toggleUser(id: string) {
-    setUsers(u => u.map(user => {
-      if (user.id !== id) return user
-      const active = !user.active
-      push(`${user.name} ${active ? 'réactivé' : 'désactivé'}.`, active ? 'success' : 'error')
-      const next = u.map(item => item.id === id ? { ...item, active } : item)
+    setUsers(u => {
+      const next = u.map(user => {
+        if (user.id !== id) return user
+        const active = !user.active
+        push(`${user.name} ${active ? 'réactivé' : 'désactivé'}.`, active ? 'success' : 'error')
+        return { ...user, active }
+      })
       saveUsers(next)
+      const targetUser = u.find(user => user.id === id)
+      if (targetUser) {
+        const authNext = authUsers.map(a => a.email === targetUser.email ? { ...a, active: !targetUser.active } : a)
+        setAuthUsers(authNext)
+        saveAuthUsers(authNext)
+      }
       setAuditLog(list => {
-        const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: active ? 'USER_REACTIVATED' : 'USER_DISABLED', target: user.name, level: 'INFO' as const }
+        const user = u.find(user => user.id === id)
+        const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: user?.active ? 'USER_DISABLED' : 'USER_REACTIVATED', target: user?.name ?? 'Utilisateur', level: 'INFO' as const }
         const nextLog = [entry, ...list]
         saveAuditLog(nextLog)
         return nextLog
       })
       return next
-    }))
+    })
   }
 
   const tabs: { id: typeof activeTab; label: string }[] = [
@@ -142,19 +175,34 @@ export default function Administration() {
   return (
     <div className="space-y-5 animate-fade-in">
       {showModal && (
-        <NewUserModal onClose={() => setShowModal(false)}
-          onCreate={user => {
-            const next = [user, ...users]
-            setUsers(next)
-            saveUsers(next)
-            const authUsers = [...persistedAuthUsers, { name: user.name, email: user.email, password: 'petrostock2024', role: user.role, depotId: user.depotId }]
-            saveAuthUsers(authUsers)
-            setPersistedAuthUsers(authUsers)
-            const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: 'USER_CREATED', target: user.email, level: 'INFO' as const }
-            const nextLog = [entry, ...auditLog]
-            setAuditLog(nextLog)
-            saveAuditLog(nextLog)
-            push(`Utilisateur ${user.name} créé.`)
+        <UserModal onClose={() => { setShowModal(false); setEditingUser(null) }}
+          initialUser={editingUser ?? undefined}
+          onSave={(user, password) => {
+            if (editingUser) {
+              const next = users.map(u => u.id === user.id ? user : u)
+              setUsers(next)
+              saveUsers(next)
+              const authNext = authUsers.map(a => a.email === editingUser.email ? { ...a, name: user.name, email: user.email, role: user.role, depotId: user.depotId, password: password ?? a.password } : a)
+              setAuthUsers(authNext)
+              saveAuthUsers(authNext)
+              const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: 'USER_UPDATED', target: user.email, level: 'INFO' as const }
+              const nextLog = [entry, ...auditLog]
+              setAuditLog(nextLog)
+              saveAuditLog(nextLog)
+              push(`Utilisateur ${user.name} mis à jour.`)
+            } else {
+              const next = [user, ...users]
+              setUsers(next)
+              saveUsers(next)
+              const authNext = [...authUsers, { name: user.name, email: user.email, password: password ?? 'petrostock2024', role: user.role, depotId: user.depotId, active: true }]
+              saveAuthUsers(authNext)
+              setAuthUsers(authNext)
+              const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: 'USER_CREATED', target: user.email, level: 'INFO' as const }
+              const nextLog = [entry, ...auditLog]
+              setAuditLog(nextLog)
+              saveAuditLog(nextLog)
+              push(`Utilisateur ${user.name} créé.`)
+            }
           }} />
       )}
 
@@ -254,17 +302,31 @@ export default function Administration() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => push(`Édition de ${u.name} — fonctionnalité à venir.`, 'info')}
+                            onClick={() => { setEditingUser(u); setShowModal(true) }}
                             className="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-white/5"
                             style={{ color: '#718096' }} title="Modifier">
                             <Edit2 size={13} />
                           </button>
                           {u.id !== 'U8' && (
-                            <button onClick={() => toggleUser(u.id)}
+                            <button onClick={() => {
+                              const next = users.filter(item => item.id !== u.id)
+                              setUsers(next)
+                              saveUsers(next)
+                              const authNext = authUsers.filter(item => item.email !== u.email)
+                              setAuthUsers(authNext)
+                              saveAuthUsers(authNext)
+                              setAuditLog(list => {
+                                const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: 'USER_DELETED', target: u.email, level: 'ERROR' as const }
+                                const nextLog = [entry, ...list]
+                                saveAuditLog(nextLog)
+                                return nextLog
+                              })
+                              push(`Utilisateur ${u.name} supprimé.`, 'error')
+                            }}
                               className="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-white/5"
-                              style={{ color: u.active ? '#e53e3e' : '#38a169' }}
-                              title={u.active ? 'Désactiver' : 'Activer'}>
-                              <Power size={13} />
+                              style={{ color: '#e53e3e' }}
+                              title="Supprimer">
+                              <X size={13} />
                             </button>
                           )}
                         </div>

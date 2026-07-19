@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Warehouse, ShoppingCart, TrendingUp, Shield, Flame, Eye, EyeOff } from 'lucide-react'
-import type { Role } from './data'
-import { DEMO_USERS, ROLE_LABELS } from './data'
-import { loadAuthUsers, saveAuthUsers } from './lib/storage'
+import type { AuthUser, Role } from './data'
+import { DEMO_USERS, DEMO_CREDS, ROLE_LABELS } from './data'
+import { loadAuthUsers } from './lib/storage'
 
 interface LoginProps {
-  onLogin: (role: Role) => void
+  onLogin: (user: AuthUser) => void
 }
 
 const ROLE_CONFIG: { role: Role; icon: typeof Warehouse; desc: string; color: string; accent: string }[] = [
@@ -15,16 +15,13 @@ const ROLE_CONFIG: { role: Role; icon: typeof Warehouse; desc: string; color: st
   { role: 'admin', icon: Shield, desc: 'Gestion des utilisateurs, configuration système', color: '#e53e3e', accent: 'rgba(229,62,62,0.12)' },
 ]
 
-const DEMO_CREDS: Record<Role, { email: string; pass: string }> = {
-  depot:     { email: 'k.asante@petrostock.tg', pass: 'depot2024' },
-  achat:     { email: 'y.dossou@petrostock.tg', pass: 'achat2024' },
-  direction: { email: 's.koffi@petrostock.tg',  pass: 'dir2024' },
-  admin:     { email: 'admin@petrostock.tg',     pass: 'admin2024' },
-}
-
 function getStoredAuthUsers() {
   const stored = loadAuthUsers()
   return stored.length > 0 ? stored : []
+}
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).map(word => word[0]).join('').slice(0, 2).toUpperCase() || '??'
 }
 
 export default function Login({ onLogin }: LoginProps) {
@@ -36,6 +33,7 @@ export default function Login({ onLogin }: LoginProps) {
   const [error, setError] = useState('')
 
   const storedUsers = useMemo(() => getStoredAuthUsers(), [])
+  const storedEmailCount = storedUsers.length
 
   function handleRoleSelect(role: Role) {
     setSelectedRole(role)
@@ -46,21 +44,44 @@ export default function Login({ onLogin }: LoginProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!selectedRole) { setError('Veuillez sélectionner un profil.'); return }
+    const normalizedEmail = email.trim().toLowerCase()
+    const matchedSavedUser = storedUsers.find(u => u.email.toLowerCase() === normalizedEmail && u.password === password && u.active !== false)
+    const matchedDemoRole = (Object.keys(DEMO_CREDS) as Role[]).find(role => normalizedEmail === DEMO_CREDS[role].email && password === DEMO_CREDS[role].pass)
 
-    const expected = DEMO_CREDS[selectedRole]
-    const matchesDemo = email.trim().toLowerCase() === expected.email && password === expected.pass
-    const matchesStored = storedUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password && u.role === selectedRole)
+    // DEBUG: persist attempt details so tests can inspect
+    try {
+      window.localStorage.setItem('debug-login', JSON.stringify({ normalizedEmail, matchedDemoRole: matchedDemoRole ?? null, matchedSavedUser: matchedSavedUser ? { email: matchedSavedUser.email, role: matchedSavedUser.role } : null, selectedRole }))
+      if (matchedDemoRole) document.title = 'petro-login:DEMO'
+      else if (matchedSavedUser) document.title = 'petro-login:SAVED'
+      else document.title = 'petro-login:NOMATCH'
+    } catch (e) {
+      // ignore
+    }
 
-    if (!matchesDemo && !matchesStored) {
-      setError('Identifiant ou mot de passe incorrect.');
+    if (!matchedSavedUser && !matchedDemoRole) {
+      setError('Identifiant ou mot de passe incorrect.')
       return
     }
 
+    if (selectedRole) {
+      const savedMatch = matchedSavedUser && matchedSavedUser.role === selectedRole
+      const demoMatch = matchedDemoRole === selectedRole
+      if (!savedMatch && !demoMatch) {
+        setError('Le rôle sélectionné ne correspond pas aux identifiants fournis.')
+        return
+      }
+    }
+
+    const resolvedRole = matchedSavedUser?.role ?? matchedDemoRole!
+    const authUser: AuthUser = matchedSavedUser
+      ? { id: `U-${matchedSavedUser.email}`, name: matchedSavedUser.name, email: matchedSavedUser.email, role: matchedSavedUser.role, depotId: matchedSavedUser.depotId, avatar: initials(matchedSavedUser.name) }
+      : DEMO_USERS[resolvedRole]
+
+    if (!selectedRole) setSelectedRole(resolvedRole)
     setLoading(true)
     setTimeout(() => {
       setLoading(false)
-      onLogin(selectedRole)
+      onLogin(authUser)
     }, 900)
   }
 
@@ -142,7 +163,7 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           {/* Login form */}
-          <div style={{ opacity: selectedRole ? 1 : 0.35, transition: 'opacity 0.3s', pointerEvents: selectedRole ? 'all' : 'none' }}>
+          <div>
             <div className="border-t mb-6" style={{ borderColor: '#1c2540' }} />
             <p className="font-mono text-xs tracking-widest uppercase mb-4" style={{ color: '#4a5568' }}>
               Authentification
@@ -186,18 +207,18 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
               </div>
 
-              {selectedRole && (
+              {DEMO_CREDS[selectedRole ?? 'depot'] && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-md" style={{ background: 'rgba(232,160,32,0.08)', border: '1px solid rgba(232,160,32,0.2)' }}>
                   <span className="font-mono text-xs" style={{ color: '#718096' }}>DÉMO ·</span>
                   <span className="font-mono text-xs" style={{ color: '#e8a020' }}>
-                    {DEMO_CREDS[selectedRole].email} / {DEMO_CREDS[selectedRole].pass}
+                    {DEMO_CREDS[selectedRole ?? 'depot'].email} / {DEMO_CREDS[selectedRole ?? 'depot'].pass}
                   </span>
                 </div>
               )}
 
-              {storedUsers.length > 0 && (
+              {storedEmailCount > 0 && (
                 <div className="text-xs" style={{ color: '#4a5568' }}>
-                  Comptes personnalisés enregistrés : {storedUsers.length}
+                  {storedEmailCount} compte{storedEmailCount > 1 ? 's' : ''} interne{storedEmailCount > 1 ? 's' : ''} disponible{storedEmailCount > 1 ? 's' : ''} - connectez-vous avec votre adresse professionnelle.
                 </div>
               )}
 
