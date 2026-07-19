@@ -5,8 +5,15 @@ from database import get_db
 
 from models import Stock 
 
+from routers import stocks, commande, incident, factures, kpi
 
 app = FastAPI(title="PetroStock SA API")
+
+app.include_router(stocks.router)
+app.include_router(commande.router) 
+app.include_router(incident.router)
+app.include_router(factures.router)
+app.include_router(kpi.router)
 
 @app.get("/")
 def accueil():
@@ -20,4 +27,5 @@ def test_orm(db: Session = Depends(get_db)):
         "produit_id": premier_stock.produit_id,
         "sorties": float(premier_stock.sorties)
     }
+
 
