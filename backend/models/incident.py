@@ -17,7 +17,7 @@ class Incident(Base):
     quantite_perdue = Column(Numeric(14, 2))
     unite= Column(String(20))  # Ex: "Litres", "Barils"
     cout_incident_usd = Column(Numeric(16, 2))
-    duree_arrêt_heures = Column(Numeric(8, 2))
+    duree_arret_heures = Column(Numeric(8, 2))
     operateur_responsable = Column(String(10))
     statut = Column(String(30))  # Ex: "En cours", "Résolu", "Non résolu"
     date_resolution = Column(Date)

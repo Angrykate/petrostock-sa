@@ -5,7 +5,7 @@ from database import Base
 class FactureVente(Base):
     __tablename__ = "facture_vente"
 
-    facture_vente_id = Column(String(20), primary_key=True)
+    facture_id = Column(String(20), primary_key=True)
     date_facture = Column(Date, nullable=False)
     date_echeance = Column(Date)
     client_id = Column(String(10), ForeignKey("client.client_id"))
