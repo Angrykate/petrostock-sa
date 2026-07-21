@@ -1,6 +1,6 @@
 """Script d'initialisation de la base de données SQLite avec données de test."""
-from database import engine, SessionLocal, Base
-from models import Depot, Produit, Fournisseur, Client, Stock, BonCommande, Mouvement, FactureVente, Incident
+from backend.database import engine, SessionLocal, Base
+from backend.models import Depot, Produit, Fournisseur, Client, Stock, BonCommande, Mouvement, FactureVente, Incident
 from datetime import date, timedelta
 import random
 

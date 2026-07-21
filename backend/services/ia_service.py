@@ -1,10 +1,13 @@
-import joblib
 import os
+from pathlib import Path
+import joblib
+import pandas as pd
 from fastapi import HTTPException
 from dotenv import load_dotenv
 
 load_dotenv()
-MODELS_DIR = os.getenv("MODELS_DIR", "../models")
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODELS_DIR = Path(os.getenv("MODELS_DIR", str(BASE_DIR / "../models"))).resolve()
 
 
 class IAService:
@@ -18,6 +21,17 @@ class IAService:
         self.scaler_anomalies = None
         self.modele_incidents = None
         self.encoders_incidents = None
+        self.rupture_features = [
+            'stock_fin_jour', 'taux_remplissage_pct', 'sorties', 'entrees',
+            'stock_ma7', 'stock_ma14', 'sorties_ma7', 'sorties_ma14',
+            'sorties_ma30', 'couverture_lag1', 'couverture_lag7', 'couverture_lag14',
+            'tendance_stock', 'jour_semaine', 'mois', 'trimestre',
+            'is_weekend', 'prix_wti_usd_baril'
+        ]
+        self.anomaly_features = [
+            'stock_fin_jour', 'taux_remplissage_pct', 'entrees', 'sorties',
+            'stock_debut_jour', 'mois', 'jour_sem', 'is_weekend'
+        ]
         self._initialiser_modeles()
 
     def _initialiser_modeles(self):
@@ -52,32 +66,50 @@ class IAService:
             )
         return True
 
-    def predire_demande(self, depot_id: str, produit_id: str, horizon_jours: int = 30):
+    def predire_demande(self, request: dict):
         """Prévision de demande pour un produit dans un dépôt."""
         self._modele_est_disponible(self.modele_prevision, "prevision_demande")
-        # À adapter selon le format exact attendu par le modèle de SIDIBE
-        donnees_entree = self._preparer_donnees_prevision(depot_id, produit_id, horizon_jours)
-        prediction = self.modele_prevision.predict(donnees_entree)
-        return prediction
+
+        horizon_jours = int(request.get("horizon_jours", 30))
+
+        if not hasattr(self.modele_prevision, "make_future_dataframe"):
+            raise HTTPException(
+                status_code=503,
+                detail="Le modèle de prévision chargé n'est pas compatible avec la prédiction automatique."
+            )
+
+        future = self.modele_prevision.make_future_dataframe(periods=horizon_jours, freq="D")
+        forecast = self.modele_prevision.predict(future)
+
+        if "yhat" not in forecast.columns:
+            raise HTTPException(
+                status_code=503,
+                detail="Le modèle de prévision n'a pas renvoyé la colonne attendue 'yhat'."
+            )
+
+        sortie = []
+        for _, row in forecast.tail(horizon_jours).iterrows():
+            sortie.append({
+                "ds": row["ds"].strftime("%Y-%m-%d") if hasattr(row["ds"], "strftime") else str(row["ds"]),
+                "yhat": float(row["yhat"])
+            })
+        return sortie
 
     def detecter_anomalie(self, observation: dict) -> dict:
         """Détecte si une observation est une anomalie via Isolation Forest."""
         self._modele_est_disponible(self.modele_anomalies, "anomalies")
         import numpy as np
-        # Préparer les données dans le bon ordre de colonnes
-        colonnes_attendues = [
-            "stock_fin_jour", "entrees", "sorties", "taux_remplissage_pct"
-        ]
+
+        colonnes_attendues = self.anomaly_features
         valeurs = [observation.get(col, 0) for col in colonnes_attendues]
+        valeurs = [float(v) if col != "is_weekend" else float(bool(v)) for col, v in zip(colonnes_attendues, valeurs)]
 
-        # Appliquer le scaler si disponible
+        donnees = np.array([valeurs], dtype=float)
         if self.scaler_anomalies is not None:
-            donnees_normalisees = self.scaler_anomalies.transform([valeurs])
-        else:
-            donnees_normalisees = np.array([valeurs])
+            donnees = self.scaler_anomalies.transform(donnees)
 
-        score = self.modele_anomalies.decision_function(donnees_normalisees)
-        prediction = self.modele_anomalies.predict(donnees_normalisees)
+        score = self.modele_anomalies.decision_function(donnees)
+        prediction = self.modele_anomalies.predict(donnees)
         return {
             "anomalie": bool(prediction[0] == -1),
             "score": float(score[0])
@@ -91,32 +123,19 @@ class IAService:
         gravite = self.modele_incidents.predict([donnees_encodees])
         return gravite[0]
 
-    def estimer_jours_rupture(self, depot_id: str, produit_id: str) -> float:
+    def estimer_jours_rupture(self, donnees: dict) -> float:
         """Estime le nombre de jours avant rupture de stock."""
         self._modele_est_disponible(self.modele_ruptures, "ruptures")
-        donnees_entree = self._preparer_donnees_rupture(depot_id, produit_id)
+        donnees_entree = self._preparer_donnees_rupture(donnees)
         prediction = self.modele_ruptures.predict(donnees_entree)
         return float(prediction[0])
 
     # ----- Fonctions internes de préparation -----
-    # Ces méthodes sont à compléter quand les notebooks de SIDIBE/SEMAGNON
-    # seront finalisés, pour correspondre exactement au format d'entrée
-    # attendu par chaque modèle.
-
-    def _preparer_donnees_prevision(self, depot_id: str, produit_id: str, horizon_jours: int = 30):
-        """À compléter selon le format d'entrée du modèle de prévision (Prophet/ARIMA)."""
-        from datetime import datetime, timedelta
-        import pandas as pd
-        dates = pd.date_range(start=datetime.now(), periods=horizon_jours, freq='D')
-        return pd.DataFrame({
-            'ds': dates,
-            'depot_id': depot_id,
-            'produit_id': produit_id
-        })
-
-    def _preparer_donnees_rupture(self, depot_id: str, produit_id: str):
-        """À compléter selon le format d'entrée du modèle de rupture."""
-        return [[depot_id, produit_id]]
+    def _preparer_donnees_rupture(self, donnees: dict):
+        """Prépare les données d'entrée pour le modèle de rupture."""
+        import numpy as np
+        valeurs = [donnees.get(feature, 0) for feature in self.rupture_features]
+        return np.array([valeurs], dtype=float)
 
     def _encoder_incident(self, incident: dict):
         """À compléter selon les encodeurs utilisés dans le notebook 08."""

@@ -3,11 +3,11 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from database import get_db
+from backend.database import get_db
 
-from models import Stock
+from backend.models import Stock
 
-from routers import stocks, commande, incident, factures, kpi, anomalies, ruptures, previsions
+from backend.routers import stocks, commande, incident, factures, kpi, anomalies, ruptures, previsions
 
 app = FastAPI(title="PetroStock SA API")
 

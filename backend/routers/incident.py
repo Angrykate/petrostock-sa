@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 
-from database import get_db
-from models import Incident
-from schemas.incident import IncidentCreate, IncidentOut
+from backend.database import get_db
+from backend.models import Incident
+from backend.schemas.incident import IncidentCreate, IncidentOut
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 

@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 
-from database import get_db
-from models import BonCommande
-from schemas.commande import BonCommandeCreate, BonCommandeOut
+from backend.database import get_db
+from backend.models import BonCommande
+from backend.schemas.commande import BonCommandeCreate, BonCommandeOut
 
 router = APIRouter(prefix="/commandes", tags=["Commandes"])
 

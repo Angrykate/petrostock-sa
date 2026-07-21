@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, Date,Time, String, SmallInteger, Numeric, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, Date, Time, String, SmallInteger, Numeric, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from database import Base
+from backend.database import Base
 
 class Mouvement(Base):
     __tablename__ = "mouvement"

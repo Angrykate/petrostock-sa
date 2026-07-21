@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 
-from database import get_db
-from models import Stock
-from schemas.stock import StockOut
+from backend.database import get_db
+from backend.models import Stock
+from backend.schemas.stock import StockOut
 
 router = APIRouter(prefix="/stocks", tags=["Stocks"])
 

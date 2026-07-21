@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String
-from database import Base
+from backend.database import Base
 
 class Client(Base):
     __tablename__ = "client"

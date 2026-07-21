@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from database import get_db
-from models import Stock, Incident
+from backend.database import get_db
+from backend.models import Stock, Incident
 
 router = APIRouter(prefix="/kpi", tags=["KPI"])
 

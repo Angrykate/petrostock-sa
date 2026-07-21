@@ -1,15 +1,20 @@
-from fastapi import APIRouter
-from services.ia_service import ia_service
+from fastapi import APIRouter, HTTPException
+from backend.schemas.prevision import PrevisionRequest, PrevisionResponse
+from backend.services.ia_service import ia_service
 
 router = APIRouter(prefix="/previsions", tags=["Prévisions"])
 
 
-@router.get("/{produit_id}")
-def prevision_demande(produit_id: str, depot_id: str, horizon_jours: int = 30):
-    """Prévision de demande pour un produit dans un dépôt sur un horizon donné."""
-    prediction = ia_service.predire_demande(depot_id, produit_id, horizon_jours)
-    return {
-        "depot_id": depot_id,
-        "produit_id": produit_id,
-        "prevision": prediction.tolist()
-    }
+@router.post("/demande", response_model=PrevisionResponse)
+def prevision_demande(request: PrevisionRequest):
+    """Prévision de demande pour un produit sur un horizon donné."""
+    try:
+        prediction = ia_service.predire_demande(request.dict())
+    except HTTPException as exc:
+        raise exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if isinstance(prediction, list) and prediction:
+        return {"demande_prev": float(prediction[-1].get("yhat", 0.0))}
+    return {"demande_prev": 0.0}
