@@ -52,10 +52,14 @@ export default function Stocks({ user }: { user: AuthUser }) {
     })
     setAnalyzingId(null)
     if (!result) {
-      push('Analyse IA indisponible : le backend ne répond pas.', 'error')
+      push('Analyse IA indisponible : le backend ne répond pas. Lancez le backend avec "uvicorn main:app" depuis backend/.', 'error')
       return
     }
-    push(result.anomalie ? `Anomalie détectée pour ${getProductName(stock.productId)}.` : `Aucune anomalie détectée pour ${getProductName(stock.productId)}.`, result.anomalie ? 'error' : 'success')
+    if (result.anomalie) {
+      push(`⚠️ Anomalie IA détectée pour ${getProductName(stock.productId)} au ${getDepotName(stock.depotId)} (score: ${result.score.toFixed(2)}).`, 'error')
+    } else {
+      push(`✅ Aucune anomalie détectée pour ${getProductName(stock.productId)} (score: ${result.score.toFixed(2)}).`, 'success')
+    }
   }
 
   const SelectStyle: React.CSSProperties = {

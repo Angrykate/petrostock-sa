@@ -281,7 +281,7 @@ export const INCIDENT_BY_SEVERITY = [
 
 export const ROLE_PAGES: Record<Role, Page[]> = {
   depot: ['dashboard', 'stocks', 'commandes', 'incidents', 'previsions'],
-  achat: ['dashboard', 'commandes', 'fournisseurs', 'previsions'],
+  achat: ['dashboard', 'commandes', 'incidents', 'fournisseurs', 'previsions'],
   direction: ['dashboard', 'stocks', 'ventes', 'previsions', 'incidents', 'fournisseurs'],
   admin: ['dashboard', 'administration'],
 }

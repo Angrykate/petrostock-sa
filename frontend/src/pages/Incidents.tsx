@@ -137,6 +137,7 @@ export default function Incidents({ user }: { user: AuthUser }) {
   const [allIncidents, setAllIncidents] = useState<Incident[]>(() => loadIncidents())
   const [sevFilter, setSevFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [depotFilter, setDepotFilter] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
   const canCreate = ['depot', 'admin'].includes(user.role)
   const isReadOnly = user.role === 'direction'
@@ -145,8 +146,9 @@ export default function Incidents({ user }: { user: AuthUser }) {
     if (user.role === 'depot' && i.depotId !== user.depotId) return false
     if (sevFilter !== 'all' && i.severity !== sevFilter) return false
     if (statusFilter !== 'all' && i.status !== statusFilter) return false
+    if (depotFilter !== 'all' && i.depotId !== depotFilter) return false
     return true
-  }), [allIncidents, sevFilter, statusFilter, user])
+  }), [allIncidents, sevFilter, statusFilter, depotFilter, user])
 
   const totalCost = incidents.reduce((a, i) => a + i.costFCFA, 0)
 
@@ -242,6 +244,13 @@ export default function Incidents({ user }: { user: AuthUser }) {
             <option value="all">Tous statuts</option>
             {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
+          {user.role !== 'depot' && (
+            <select value={depotFilter} onChange={e => setDepotFilter(e.target.value)}
+              style={{ background: '#0c1121', border: '1px solid #1c2540', color: '#e2e8f0', borderRadius: 6, padding: '6px 10px', fontSize: 12, fontFamily: "'JetBrains Mono', monospace", outline: 'none' }}>
+              <option value="all">Tous dépôts</option>
+              {DEPOTS.map(d => <option key={d.id} value={d.id}>{d.city}</option>)}
+            </select>
+          )}
           <span className="font-mono text-xs" style={{ color: '#4a5568' }}>
             Coût total: <span className="text-white">{fmt.fcfa(totalCost)}</span>
           </span>

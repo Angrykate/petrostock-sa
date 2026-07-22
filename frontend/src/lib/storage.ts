@@ -132,9 +132,13 @@ export function loadOrders(): Order[] {
   return readStorage<Order[]>('petrostock.orders', ORDERS)
 }
 
-export function saveOrders(orders: Order[]) {
+export function saveOrders(orders: Order[], silent: boolean = false) {
   _ordersCache = orders
-  writeStorage('petrostock.orders', orders)
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem('petrostock.orders', JSON.stringify(orders))
+  if (!silent) {
+    window.dispatchEvent(new Event('petrostock-storage-update'))
+  }
 }
 
 /** Crée une commande via l'API et met à jour le cache local */

@@ -209,13 +209,16 @@ function DepotDashboard({ user, stocks, orders, incidents }: { user: AuthUser; s
   )
 }
 
-function AchatDashboard({ orders }: { orders: Order[] }) {
+function AchatDashboard(_props: { orders: Order[] }) {
   const { push } = useToast()
-  const [currentOrders, setCurrentOrders] = useState(orders)
+  const [currentOrders, setCurrentOrders] = useState<Order[]>(() => loadOrders())
 
+  // Écouter les mises à jour depuis d'autres onglets/pages
   useEffect(() => {
-    setCurrentOrders(orders)
-  }, [orders])
+    const handler = () => setCurrentOrders(loadOrders())
+    window.addEventListener('petrostock-storage-update', handler)
+    return () => window.removeEventListener('petrostock-storage-update', handler)
+  }, [])
   const pendingOrders = currentOrders.filter(o => o.status === 'envoyee')
   const approvedOrders = currentOrders.filter(o => o.status === 'approuvee')
   const inTransit = currentOrders.filter(o => o.status === 'en_transit')

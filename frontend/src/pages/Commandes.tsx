@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Trash2 } from 'lucide-react'
 import type { AuthUser, Order, StockEntry } from '../data'
 import { ORDERS, PRODUCTS, DEPOTS, SUPPLIERS, getProductName, getDepotName, getSupplierName, fmt, getProductUnitPrice, getSupplierRecommendationScore } from '../data'
 import { Button, EmptyState } from '../components/ui'
 import { useToast } from '../lib/toast'
 import { loadOrders, saveOrders, loadStocks, saveStocks } from '../lib/storage'
+import * as api from '../lib/api'
 
 const STATUS_META: Record<Order['status'], { label: string; color: string }> = {
   brouillon:  { label: 'Brouillon',   color: '#4a5568' },
@@ -15,12 +16,31 @@ const STATUS_META: Record<Order['status'], { label: string; color: string }> = {
   annulee:    { label: 'Annulée',     color: '#e53e3e' },
 }
 
-let orderSeq = ORDERS.length + 1
+// Lire le dernier ID depuis localStorage pour éviter les doublons après rechargement
+let orderSeq = (() => {
+  const stored = loadOrders()
+  const maxId = stored.reduce((max, o) => {
+    const num = parseInt(o.id.replace('O', ''))
+    return num > max ? num : max
+  }, ORDERS.length)
+  return maxId + 1
+})()
 
-function Modal({ onClose, user, onCreate, initial }: { onClose: () => void; user: AuthUser; onCreate: (o: Order) => void; initial?: Partial<{ productId: string; depotId: string; quantity: number }> }) {
+// ─── MODALE DE CRÉATION / ÉDITION ─────────────────────────────────────────────
+
+function OrderModal({ onClose, user, onSave, editOrder }: {
+  onClose: () => void
+  user: AuthUser
+  onSave: (o: Order) => void
+  editOrder?: Order | null
+}) {
+  const isEdit = !!editOrder
   const [form, setForm] = useState({
-    productId: initial?.productId ?? 'P1', depotId: initial?.depotId ?? user.depotId ?? 'D1', supplierId: 'S1',
-    quantity: initial?.quantity ? String(initial.quantity) : '', note: ''
+    productId: editOrder?.productId ?? 'P1',
+    depotId: editOrder?.depotId ?? user.depotId ?? 'D1',
+    supplierId: editOrder?.supplierId ?? 'S1',
+    quantity: editOrder ? String(editOrder.quantity) : '',
+    note: editOrder?.note ?? '',
   })
   const recommendedSupplier = useMemo(() => {
     const filtered = SUPPLIERS.filter(s => s.products.includes(form.productId))
@@ -40,26 +60,27 @@ function Modal({ onClose, user, onCreate, initial }: { onClose: () => void; user
   }
   const labelCls = "font-mono text-xs uppercase tracking-widest mb-1.5 block"
 
-  function handleCreate() {
+  function handleSave() {
     setTouched(true)
     if (!isValid) return
     const estimatedUnitPrice = getProductUnitPrice(form.productId)
-    const newOrder: Order = {
-      id: `O${orderSeq}`,
-      ref: `BC-2024-0${750 + orderSeq}`,
+
+    const order: Order = {
+      id: editOrder?.id ?? `O${orderSeq}`,
+      ref: editOrder?.ref ?? `BC-2024-0${750 + orderSeq}`,
       productId: form.productId,
       depotId: form.depotId,
       supplierId: form.supplierId,
       quantity: quantityNum,
-      status: 'brouillon',
-      createdAt: new Date().toISOString().slice(0, 10),
-      expectedAt: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      createdBy: user.id,
+      status: editOrder?.status ?? 'brouillon',
+      createdAt: editOrder?.createdAt ?? new Date().toISOString().slice(0, 10),
+      expectedAt: editOrder?.expectedAt ?? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
+      createdBy: editOrder?.createdBy ?? user.id,
       amountFCFA: Math.round(quantityNum * estimatedUnitPrice),
       note: form.note.trim() || undefined,
     }
-    orderSeq += 1
-    onCreate(newOrder)
+    if (!isEdit) orderSeq += 1
+    onSave(order)
     onClose()
   }
 
@@ -71,9 +92,9 @@ function Modal({ onClose, user, onCreate, initial }: { onClose: () => void; user
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#1c2540' }}>
           <div>
             <h2 className="font-display text-xl font-bold tracking-wide text-white" style={{ letterSpacing: '0.06em' }}>
-              NOUVELLE COMMANDE
+              {isEdit ? 'MODIFIER LA COMMANDE' : 'NOUVELLE COMMANDE'}
             </h2>
-            <p className="font-mono text-xs mt-0.5" style={{ color: '#4a5568' }}>Bon de commande fournisseur</p>
+            {editOrder && <p className="font-mono text-xs mt-0.5" style={{ color: '#4a5568' }}>{editOrder.ref}</p>}
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors"
             style={{ color: '#4a5568' }}>
@@ -123,12 +144,154 @@ function Modal({ onClose, user, onCreate, initial }: { onClose: () => void; user
 
         <div className="flex gap-3 px-6 pb-6">
           <Button variant="outline" className="flex-1" onClick={onClose}>Annuler</Button>
-          <Button variant="primary" className="flex-1 text-base" onClick={handleCreate}>CRÉER</Button>
+          <Button variant="primary" className="flex-1 text-base" onClick={handleSave}>
+            {isEdit ? 'ENREGISTRER' : 'CRÉER'}
+          </Button>
         </div>
       </div>
     </div>
   )
 }
+
+// ─── MODALE DE RÉCEPTION ─────────────────────────────────────────────────────
+
+function ReceptionModal({ order, onClose, onConfirm }: {
+  order: Order
+  onClose: () => void
+  onConfirm: (qteLivree: number) => Promise<void>
+}) {
+  const [qte, setQte] = useState(String(order.quantity))
+  const [saving, setSaving] = useState(false)
+  const qteNum = Number(qte)
+  const isValid = qte.trim() !== '' && qteNum > 0
+  const ecartPct = order.quantity > 0 ? Math.abs(order.quantity - qteNum) / order.quantity * 100 : 0
+  const depasseSeuil = ecartPct > 3
+
+  const inputCls: React.CSSProperties = {
+    background: '#060912', border: '1px solid #1c2540', color: '#e2e8f0',
+    borderRadius: 6, padding: '8px 12px', fontSize: 13, outline: 'none',
+    fontFamily: "'DM Sans', sans-serif", width: '100%',
+  }
+
+  async function handleConfirm() {
+    if (!isValid) return
+    setSaving(true)
+    await onConfirm(qteNum)
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onKeyDown={e => e.key === 'Escape' && onClose()}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-xl border animate-slide-up"
+        style={{ background: '#0c1121', borderColor: '#1c2540', zIndex: 1 }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#1c2540' }}>
+          <h2 className="font-display text-xl font-bold tracking-wide text-white" style={{ letterSpacing: '0.06em' }}>
+            RÉCEPTIONNER
+          </h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5"
+            style={{ color: '#4a5568' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="font-mono text-sm" style={{ color: '#94a3b8' }}>
+            Commande : <span className="text-white">{order.ref}</span>
+          </div>
+          <div className="font-mono text-sm" style={{ color: '#94a3b8' }}>
+            Produit : <span className="text-white">{getProductName(order.productId)}</span>
+          </div>
+          <div className="font-mono text-sm" style={{ color: '#94a3b8' }}>
+            Quantité commandée : <span className="text-white">{fmt.litres(order.quantity)}</span>
+          </div>
+
+          <div>
+            <label className="font-mono text-xs uppercase tracking-widest mb-1.5 block" style={{ color: '#4a5568' }}>
+              Quantité réellement reçue
+            </label>
+            <input type="number" min={0} value={qte} onChange={e => setQte(e.target.value)}
+              style={{ ...inputCls, borderColor: !isValid && qte !== '' ? '#e53e3e' : '#1c2540' }} />
+          </div>
+
+          {qteNum > 0 && order.quantity > 0 && (
+            <div className="font-mono text-xs p-3 rounded-lg" style={{
+              background: depasseSeuil ? 'rgba(229,62,62,0.1)' : 'rgba(56,161,105,0.1)',
+              color: depasseSeuil ? '#e53e3e' : '#38a169',
+            }}>
+              Écart : {ecartPct.toFixed(1)}%
+              {depasseSeuil
+                ? ' — un incident sera créé automatiquement (Règle 6).'
+                : ' — dans la tolérance de 3%.'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-6 pb-6">
+          <Button variant="outline" className="flex-1" onClick={onClose}>Annuler</Button>
+          <Button variant="primary" className="flex-1 text-base" onClick={handleConfirm} disabled={!isValid || saving}
+            style={!isValid || saving ? { opacity: 0.5 } : {}}>
+            {saving ? 'Traitement...' : 'CONFIRMER'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MODALE DÉTAILS (lecture seule) ──────────────────────────────────────────
+
+function DetailModal({ order, onClose }: { order: Order; onClose: () => void }) {
+  const sm = STATUS_META[order.status]
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onKeyDown={e => e.key === 'Escape' && onClose()}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-xl border animate-slide-up"
+        style={{ background: '#0c1121', borderColor: '#1c2540', zIndex: 1 }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: '#1c2540' }}>
+          <h2 className="font-display text-xl font-bold tracking-wide text-white" style={{ letterSpacing: '0.06em' }}>
+            DÉTAILS COMMANDE
+          </h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5"
+            style={{ color: '#4a5568' }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-6 space-y-3">
+          {[
+            ['Référence', order.ref],
+            ['Produit', getProductName(order.productId)],
+            ['Dépôt', getDepotName(order.depotId)],
+            ['Fournisseur', getSupplierName(order.supplierId)],
+            ['Quantité', fmt.litres(order.quantity)],
+            ['Montant', fmt.fcfa(order.amountFCFA)],
+            ['Statut', <span key="s" className="font-mono text-xs px-2 py-1 rounded" style={{ background: sm.color + '15', color: sm.color }}>{sm.label}</span>],
+            ['Créée le', order.createdAt],
+            ['Livraison prévue', order.expectedAt],
+          ].map(([label, value]) => (
+            <div key={String(label)} className="flex justify-between font-mono text-xs py-1.5 border-b last:border-0"
+              style={{ borderColor: '#1c2540' }}>
+              <span style={{ color: '#4a5568' }}>{label}</span>
+              <span className="text-white text-right">{value}</span>
+            </div>
+          ))}
+          {order.note && (
+            <div className="pt-2">
+              <div className="font-mono text-xs mb-1" style={{ color: '#4a5568' }}>Note</div>
+              <div className="text-sm" style={{ color: '#94a3b8' }}>{order.note}</div>
+            </div>
+          )}
+        </div>
+        <div className="px-6 pb-6">
+          <Button variant="outline" className="w-full" onClick={onClose}>Fermer</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── COMPOSANT PRINCIPAL ─────────────────────────────────────────────────────
 
 export default function Commandes({ user, draft: externalDraft, onClearDraft }: { user: AuthUser; draft?: any | null; onClearDraft?: () => void }) {
   const { push } = useToast()
@@ -136,7 +299,10 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
   const [stocks, setStocks] = useState<StockEntry[]>(() => loadStocks())
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [showModal, setShowModal] = useState(false)
+  const [editOrder, setEditOrder] = useState<Order | null>(null)
   const [draft, setDraft] = useState<any | null>(null)
+  const [receptionOrder, setReceptionOrder] = useState<Order | null>(null)
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null)
   const canCreate = ['depot', 'achat', 'admin'].includes(user.role)
   const canApprove = ['achat', 'admin'].includes(user.role)
   const isReadOnly = user.role === 'direction'
@@ -150,18 +316,19 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
   useEffect(() => {
     if (externalDraft) {
       setDraft(externalDraft)
+      setEditOrder(null)  // nouveau, pas d'édition
       setShowModal(true)
       if (onClearDraft) onClearDraft()
     }
   }, [externalDraft, onClearDraft])
 
   useEffect(() => {
-    // listen for programmatic drafts written to window (optional)
     const handler = (e: any) => {
       try {
         const ce = e as CustomEvent
         if (ce?.detail?.type === 'create-order' && ce.detail.payload) {
           setDraft(ce.detail.payload)
+          setEditOrder(null)
           setShowModal(true)
         }
       } catch (err) {}
@@ -186,7 +353,7 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
 
     setAllOrders(list => {
       const next = list.map(o => o.id === id ? { ...o, status } : o)
-      saveOrders(next)
+      saveOrders(next, true)
       return next
     })
 
@@ -208,11 +375,86 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
     push(message, status === 'annulee' ? 'error' : 'success')
   }
 
+  function handleDelete(id: string) {
+    if (!window.confirm('Supprimer cette commande brouillon ?')) return
+    setAllOrders(list => {
+      const next = list.filter(o => o.id !== id)
+      saveOrders(next, true)
+      return next
+    })
+    push('Commande supprimée.', 'error')
+  }
+
+  function handleDoubleClick(o: Order) {
+    if (o.status === 'brouillon' && canCreate) {
+      // Éditer le brouillon
+      setEditOrder(o)
+      setShowModal(true)
+    } else {
+      // Voir les détails
+      setDetailOrder(o)
+    }
+  }
+
+  function handleSaveOrder(order: Order) {
+    let wasEdit = false
+    setAllOrders(list => {
+      const exists = list.find(o => o.id === order.id)
+      wasEdit = !!exists
+      let next: Order[]
+      if (exists) {
+        next = list.map(o => o.id === order.id ? order : o)
+      } else {
+        next = [order, ...list]
+      }
+      saveOrders(next)
+      return next
+    })
+    push(`Commande ${order.ref} ${wasEdit ? 'modifiée' : 'créée'}.`, 'success')
+  }
+
+  // --- Réception ---
+  async function handleConfirmReception(qteLivree: number) {
+    if (!receptionOrder) return
+    try {
+      const resp = await fetch(`${api.API_BASE}/commandes/${receptionOrder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: 'Livré', quantite_livree: qteLivree, date_livraison_reelle: new Date().toISOString().slice(0, 10) }),
+      })
+      if (resp.ok) {
+        push(`Commande ${receptionOrder.ref} réceptionnée (${fmt.litres(qteLivree)}).`, 'success')
+      } else {
+        updateStatus(receptionOrder.id, 'livree', `Commande ${receptionOrder.ref} réceptionnée (${fmt.litres(qteLivree)}).`)
+      }
+    } catch {
+      updateStatus(receptionOrder.id, 'livree', `Commande ${receptionOrder.ref} réceptionnée (${fmt.litres(qteLivree)}).`)
+    }
+  }
+
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Modales */}
       {showModal && (
-        <Modal user={user} onClose={() => { setShowModal(false); setDraft(null) }} initial={draft ?? undefined}
-          onCreate={order => { setAllOrders(list => { const next = [order, ...list]; saveOrders(next); return next }) ; push(`Commande ${order.ref} créée en brouillon.`) }} />
+        <OrderModal
+          user={user}
+          editOrder={editOrder}
+          onClose={() => { setShowModal(false); setEditOrder(null); setDraft(null) }}
+          onSave={handleSaveOrder}
+        />
+      )}
+      {receptionOrder && (
+        <ReceptionModal
+          order={receptionOrder}
+          onClose={() => setReceptionOrder(null)}
+          onConfirm={handleConfirmReception}
+        />
+      )}
+      {detailOrder && (
+        <DetailModal
+          order={detailOrder}
+          onClose={() => setDetailOrder(null)}
+        />
       )}
 
       {/* Stats + header */}
@@ -239,7 +481,7 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
             </span>
           )}
           {canCreate && (
-            <Button variant="primary" onClick={() => setShowModal(true)}>
+            <Button variant="primary" onClick={() => { setEditOrder(null); setShowModal(true) }}>
               <Plus size={16} />
               NOUVELLE COMMANDE
             </Button>
@@ -261,11 +503,14 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
             <tbody>
               {orders.map(o => {
                 const sm = STATUS_META[o.status]
+                const isDraft = o.status === 'brouillon'
                 return (
-                  <tr key={o.id} className="border-b last:border-0 transition-colors"
+                  <tr key={o.id}
+                    className="border-b last:border-0 transition-colors cursor-pointer"
                     style={{ borderColor: '#1c2540' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    onDoubleClick={() => handleDoubleClick(o)}>
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: '#718096' }}>{o.ref}</td>
                     <td className="px-4 py-3 text-white font-medium">{getProductName(o.productId)}</td>
                     <td className="px-4 py-3" style={{ color: '#94a3b8' }}>{getDepotName(o.depotId).replace('Dépôt ', '')}</td>
@@ -280,6 +525,20 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: '#718096' }}>{o.expectedAt}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
+                        {isDraft && canCreate && (
+                          <>
+                            <Button size="sm" variant="outline" style={{ color: '#3b82f6', borderColor: 'transparent', background: 'rgba(59,130,246,0.12)' }}
+                              onClick={() => updateStatus(o.id, 'envoyee', `Commande ${o.ref} envoyée au fournisseur.`)}>
+                              Envoyer
+                            </Button>
+                            <button title="Supprimer"
+                              onClick={() => handleDelete(o.id)}
+                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-white/5"
+                              style={{ color: '#e53e3e' }}>
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                         {canApprove && o.status === 'envoyee' && (
                           <>
                             <Button size="sm" variant="success" title="Approuver"
@@ -292,15 +551,15 @@ export default function Commandes({ user, draft: externalDraft, onClearDraft }: 
                             </Button>
                           </>
                         )}
-                        {o.status === 'brouillon' && canCreate && (
-                          <Button size="sm" variant="outline" style={{ color: '#3b82f6', borderColor: 'transparent', background: 'rgba(59,130,246,0.12)' }}
-                            onClick={() => updateStatus(o.id, 'envoyee', `Commande ${o.ref} envoyée au fournisseur.`)}>
-                            Envoyer
+                        {o.status === 'approuvee' && (
+                          <Button size="sm" variant="outline" style={{ color: '#e8a020', borderColor: 'transparent', background: 'rgba(232,160,32,0.12)' }}
+                            onClick={() => updateStatus(o.id, 'en_transit', `Commande ${o.ref} marquée en transit.`)}>
+                            Mettre en transit
                           </Button>
                         )}
                         {o.status === 'en_transit' && (
                           <Button size="sm" variant="success"
-                            onClick={() => updateStatus(o.id, 'livree', `Commande ${o.ref} réceptionnée.`)}>
+                            onClick={() => setReceptionOrder(o)}>
                             Réceptionner
                           </Button>
                         )}
