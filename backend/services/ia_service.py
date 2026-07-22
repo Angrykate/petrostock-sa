@@ -120,8 +120,11 @@ class IAService:
         self._modele_est_disponible(self.modele_incidents, "incidents")
         self._modele_est_disponible(self.encoders_incidents, "encoders_incidents")
         donnees_encodees = self._encoder_incident(incident)
-        gravite = self.modele_incidents.predict([donnees_encodees])
-        return gravite[0]
+        prediction = int(self.modele_incidents.predict([donnees_encodees])[0])
+        ordre_gravite = self.encoders_incidents["ordre_gravite"]
+        if prediction < 0 or prediction >= len(ordre_gravite):
+            raise HTTPException(status_code=500, detail="Classe de gravité renvoyée par le modèle inconnue.")
+        return ordre_gravite[prediction]
 
     def estimer_jours_rupture(self, donnees: dict) -> float:
         """Estime le nombre de jours avant rupture de stock."""
@@ -138,20 +141,16 @@ class IAService:
         return np.array([valeurs], dtype=float)
 
     def _encoder_incident(self, incident: dict):
-        """À compléter selon les encodeurs utilisés dans le notebook 08."""
-        # Exemple : encoder les colonnes catégorielles
+        """Prépare les sept features dans le même ordre que le notebook 08."""
         import numpy as np
-        valeurs = []
-        for col, encoder in self.encoders_incidents.items():
-            if col in incident:
-                try:
-                    val_encodee = encoder.transform([incident[col]])[0]
-                except (ValueError, AttributeError):
-                    val_encodee = -1  # valeur inconnue
-                valeurs.append(val_encodee)
-            else:
-                valeurs.append(0)
-        return np.array(valeurs)
+
+        encoder_cat = self.encoders_incidents["encoder_cat"]
+        cat_features = self.encoders_incidents["cat_features"]
+        num_features = self.encoders_incidents["num_features"]
+        valeurs_categorielles = [[incident[feature] for feature in cat_features]]
+        categories_encodees = encoder_cat.transform(valeurs_categorielles)[0]
+        valeurs_numeriques = [float(incident[feature]) for feature in num_features]
+        return np.array(list(categories_encodees) + valeurs_numeriques, dtype=float)
 
 
 # Une seule instance, créée au démarrage de l'API, réutilisée par tous les endpoints

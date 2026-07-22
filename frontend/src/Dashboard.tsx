@@ -15,7 +15,7 @@ import {
   fmt, getStockAlert
 } from './data'
 import { useToast } from './lib/toast'
-import { loadStocks, loadOrders, loadIncidents } from './lib/storage'
+import { loadStocks, loadOrders, loadIncidents, saveOrders } from './lib/storage'
 
 interface KpiCardProps {
   label: string
@@ -212,13 +212,21 @@ function DepotDashboard({ user, stocks, orders, incidents }: { user: AuthUser; s
 function AchatDashboard({ orders }: { orders: Order[] }) {
   const { push } = useToast()
   const [currentOrders, setCurrentOrders] = useState(orders)
+
+  useEffect(() => {
+    setCurrentOrders(orders)
+  }, [orders])
   const pendingOrders = currentOrders.filter(o => o.status === 'envoyee')
   const approvedOrders = currentOrders.filter(o => o.status === 'approuvee')
   const inTransit = currentOrders.filter(o => o.status === 'en_transit')
   const totalValue = currentOrders.filter(o => !['livree','annulee'].includes(o.status)).reduce((a, o) => a + o.amountFCFA, 0)
 
   function updateOrder(id: string, status: Order['status'], msg: string) {
-    setOrders(list => list.map(o => o.id === id ? { ...o, status } : o))
+    setCurrentOrders(list => {
+      const next = list.map(o => o.id === id ? { ...o, status } : o)
+      saveOrders(next)
+      return next
+    })
     push(msg)
   }
 
@@ -284,7 +292,7 @@ function AchatDashboard({ orders }: { orders: Order[] }) {
             </tr>
           </thead>
           <tbody>
-            {orders.filter(o => o.status !== 'livree' && o.status !== 'annulee').map(o => {
+            {currentOrders.filter(o => o.status !== 'livree' && o.status !== 'annulee').map(o => {
               const sm: Record<string, { label: string; color: string }> = {
                 brouillon: { label: 'Brouillon', color: '#4a5568' },
                 envoyee: { label: 'Envoyée', color: '#3b82f6' },

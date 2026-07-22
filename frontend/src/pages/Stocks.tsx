@@ -3,7 +3,7 @@ import { Search, Filter, Eye } from 'lucide-react'
 import type { AuthUser, StockEntry } from '../data'
 import { DEPOTS, PRODUCTS, getProductName, getDepotName, fmt, getStockAlert } from '../data'
 import { useToast } from '../lib/toast'
-import { loadStocks } from '../lib/storage'
+import { detecterAnomalieViaApi, loadStocks } from '../lib/storage'
 import { EmptyState } from '../components/ui'
 
 export default function Stocks({ user }: { user: AuthUser }) {
@@ -12,6 +12,7 @@ export default function Stocks({ user }: { user: AuthUser }) {
   const [productFilter, setProductFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [stocks, setStocks] = useState<StockEntry[]>(() => loadStocks())
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null)
   const readOnly = user.role === 'direction'
 
   useEffect(() => {
@@ -35,6 +36,27 @@ export default function Stocks({ user }: { user: AuthUser }) {
   const critCount = entries.filter(s => getStockAlert(s) === 'critical').length
   const warnCount = entries.filter(s => getStockAlert(s) === 'warning').length
   const topCritical = entries.find(s => getStockAlert(s) === 'critical')
+
+  async function analyserStock(stock: StockEntry) {
+    const id = `${stock.depotId}-${stock.productId}`
+    setAnalyzingId(id)
+    const result = await detecterAnomalieViaApi({
+      stock_fin_jour: stock.current,
+      taux_remplissage_pct: stock.capacity > 0 ? (stock.current / stock.capacity) * 100 : 0,
+      entrees: 0,
+      sorties: 0,
+      stock_debut_jour: stock.current,
+      mois: new Date().getMonth() + 1,
+      jour_sem: new Date().getDay(),
+      is_weekend: [0, 6].includes(new Date().getDay()) ? 1 : 0,
+    })
+    setAnalyzingId(null)
+    if (!result) {
+      push('Analyse IA indisponible : le backend ne répond pas.', 'error')
+      return
+    }
+    push(result.anomalie ? `Anomalie détectée pour ${getProductName(stock.productId)}.` : `Aucune anomalie détectée pour ${getProductName(stock.productId)}.`, result.anomalie ? 'error' : 'success')
+  }
 
   const SelectStyle: React.CSSProperties = {
     background: '#0c1121', border: '1px solid #1c2540', color: '#e2e8f0',
@@ -183,8 +205,16 @@ export default function Stocks({ user }: { user: AuthUser }) {
                     </td>
                     {!readOnly && (
                       <td className="px-4 py-3">
-                        {alert !== 'ok' && (
+                        <div className="flex gap-2">
                           <button
+                            onClick={() => analyserStock(s)}
+                            disabled={analyzingId === `${s.depotId}-${s.productId}`}
+                            className="font-mono text-xs px-3 py-1 rounded border transition-colors hover:bg-white/5"
+                            style={{ borderColor: '#8b5cf6', color: '#c4b5fd', background: 'rgba(139,92,246,0.08)' }}>
+                            {analyzingId === `${s.depotId}-${s.productId}` ? 'Analyse...' : 'Analyser IA'}
+                          </button>
+                          {alert !== 'ok' && (
+                            <button
                             onClick={() => {
                               const suggested = Math.max(1000, Math.ceil((s.capacity - s.current) / 1000) * 1000)
                               try {
@@ -195,8 +225,9 @@ export default function Stocks({ user }: { user: AuthUser }) {
                             className="font-mono text-xs px-3 py-1 rounded border transition-colors hover:bg-white/5"
                             style={{ borderColor: '#e8a020', color: '#e8a020', background: 'rgba(232,160,32,0.08)' }}>
                             Commander
-                          </button>
-                        )}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>

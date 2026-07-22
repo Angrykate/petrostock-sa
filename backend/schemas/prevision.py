@@ -25,7 +25,9 @@ class PrevisionRequest(BaseModel):
     prix_wti_usd_baril: float
 
 class PrevisionResponse(BaseModel):
-    demande_prev: float
+    depot_id: Optional[str] = None
+    produit_id: Optional[str] = None
+    prevision: list[float] = []
 
     class Config:
         orm_mode = True

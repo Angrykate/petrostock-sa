@@ -21,7 +21,10 @@ class RuptureRequest(BaseModel):
     prix_wti_usd_baril: float
 
 class RuptureResponse(BaseModel):
-    rupture_risk: float
+    depot_id: str
+    produit_id: str
+    jours_couverture_estimes: float
+    niveau_alerte: str
 
     class Config:
         orm_mode = True

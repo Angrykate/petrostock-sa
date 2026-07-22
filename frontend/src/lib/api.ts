@@ -128,6 +128,11 @@ export interface CreerIncidentData {
   date_incident: string;
   depot_id: string;
   type_incident: string;
+  produit_concerne_id?: string;
+  duree_arret_heures?: number;
+  quantite_perdue?: number;
+  heure_int?: number;
+  mois?: number;
   gravite?: string;
   description?: string;
 }
@@ -172,9 +177,13 @@ export async function getFactures(
 // ===== Anomalies =====
 export interface DetectionAnomalie {
   stock_fin_jour: number;
+  taux_remplissage_pct: number;
   entrees: number;
   sorties: number;
-  taux_remplissage_pct: number;
+  stock_debut_jour: number;
+  mois: number;
+  jour_sem: number;
+  is_weekend: number;
 }
 
 export interface ResultatDetection {

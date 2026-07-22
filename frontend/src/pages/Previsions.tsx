@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 import { Brain, TrendingDown, AlertTriangle } from 'lucide-react'
 import { DEMAND_FORECAST, STOCKS, DEPOTS, PRODUCTS, getStockAlert } from '../data'
+import { estimerRuptureViaApi, getPrevisionViaApi } from '../lib/storage'
 
 export default function Previsions() {
   const [selectedDepot, setSelectedDepot] = useState('D2')
   const [selectedProduct, setSelectedProduct] = useState('P1')
+  const [apiForecast, setApiForecast] = useState<number[] | null>(null)
+  const [apiRuptureDays, setApiRuptureDays] = useState<number | null>(null)
 
   const algo = 'Prophet'
 
@@ -17,13 +20,32 @@ export default function Previsions() {
   const product = PRODUCTS.find(p => p.id === selectedProduct)
   const ruptureDays = selectedStock?.daysToStockout ?? 30
 
-  const chartData = useMemo(() => DEMAND_FORECAST.map((d, i) => ({
-    ...d,
-    predicted: Math.round(d.predicted * (algo === 'LSTM' ? 1.04 : algo === 'ARIMA' ? 0.98 : algo === 'XGBoost' ? 1.01 : 1)),
-    lower: Math.round(d.lower * (algo === 'LSTM' ? 1.02 : algo === 'ARIMA' ? 0.96 : algo === 'XGBoost' ? 0.99 : 1)),
-    upper: Math.round(d.upper * (algo === 'LSTM' ? 1.06 : algo === 'ARIMA' ? 1.02 : algo === 'XGBoost' ? 1.03 : 1)),
-    isFuture: i >= 0,
-  })), [algo])
+  useEffect(() => {
+    let active = true
+    setApiForecast(null)
+    setApiRuptureDays(null)
+    Promise.all([
+      getPrevisionViaApi(`PRD${selectedProduct.replace(/^P/, '').padStart(3, '0')}`, `D${selectedDepot.replace(/^D/, '').padStart(3, '0')}`, 30),
+      estimerRuptureViaApi(`D${selectedDepot.replace(/^D/, '').padStart(3, '0')}`, `PRD${selectedProduct.replace(/^P/, '').padStart(3, '0')}`),
+    ]).then(([forecast, rupture]) => {
+      if (!active) return
+      if (forecast?.prevision?.length) setApiForecast(forecast.prevision)
+      if (rupture) setApiRuptureDays(rupture.jours_couverture_estimes)
+    })
+    return () => { active = false }
+  }, [selectedDepot, selectedProduct])
+
+  const displayedRuptureDays = apiRuptureDays ?? ruptureDays
+
+  const chartData = useMemo(() => apiForecast?.length
+    ? apiForecast.map((predicted, i) => ({ day: i + 1, label: `J+${i + 1}`, predicted: Math.round(predicted), lower: Math.round(predicted * 0.9), upper: Math.round(predicted * 1.1), isFuture: true }))
+    : DEMAND_FORECAST.map((d, i) => ({
+      ...d,
+      predicted: Math.round(d.predicted * (algo === 'LSTM' ? 1.04 : algo === 'ARIMA' ? 0.98 : algo === 'XGBoost' ? 1.01 : 1)),
+      lower: Math.round(d.lower * (algo === 'LSTM' ? 1.02 : algo === 'ARIMA' ? 0.96 : algo === 'XGBoost' ? 0.99 : 1)),
+      upper: Math.round(d.upper * (algo === 'LSTM' ? 1.06 : algo === 'ARIMA' ? 1.02 : algo === 'XGBoost' ? 1.03 : 1)),
+      isFuture: i >= 0,
+    })), [apiForecast, algo])
 
   const SelectStyle: React.CSSProperties = {
     background: '#0c1121', border: '1px solid #1c2540', color: '#e2e8f0',
@@ -44,7 +66,7 @@ export default function Previsions() {
             MOTEUR IA · PRÉVISION DE LA DEMANDE
           </div>
           <div className="font-mono text-xs mt-0.5" style={{ color: '#4a5568' }}>
-            Modèle fixe: Prophet — Données 2015–2024 (321 464 observations)
+            Modèle Prophet — {apiForecast ? 'API backend connectée' : 'mode local de secours'}
           </div>
         </div>
         <div className="ml-auto text-right shrink-0">
@@ -122,8 +144,8 @@ export default function Previsions() {
           </div>
           <div className="text-right">
             <div className="font-mono text-xs" style={{ color: '#4a5568' }}>Rupture estimée</div>
-            <div className="font-display text-2xl font-bold" style={{ color: ruptureDays <= 7 ? '#e53e3e' : '#e8a020' }}>
-              J+{ruptureDays}
+            <div className="font-display text-2xl font-bold" style={{ color: displayedRuptureDays <= 7 ? '#e53e3e' : '#e8a020' }}>
+              J+{Math.round(displayedRuptureDays)}
             </div>
           </div>
         </div>
@@ -138,10 +160,10 @@ export default function Previsions() {
               <span className="font-mono text-xs" style={{ color: '#4a5568' }}>{l.label}</span>
             </div>
           ))}
-          {ruptureDays <= 10 && (
+          {displayedRuptureDays <= 10 && (
             <div className="flex items-center gap-1.5 ml-auto">
               <TrendingDown size={13} style={{ color: '#e53e3e' }} />
-              <span className="font-mono text-xs" style={{ color: '#e53e3e' }}>Rupture imminente dans {ruptureDays} jours</span>
+              <span className="font-mono text-xs" style={{ color: '#e53e3e' }}>Rupture imminente dans {Math.round(displayedRuptureDays)} jours</span>
             </div>
           )}
         </div>
@@ -165,8 +187,8 @@ export default function Previsions() {
             <Area type="monotone" dataKey="upper" name="Borne haute" stroke="none" fill="url(#gCI)" />
             <Area type="monotone" dataKey="lower" name="Borne basse" stroke="none" fill="#060912" />
             <Line type="monotone" dataKey="predicted" name="Prévision (L/j)" stroke="#8b5cf6" strokeWidth={2.5} dot={false} />
-            {ruptureDays <= 30 && (
-              <ReferenceLine x={`J+${ruptureDays}`} stroke="#e53e3e" strokeDasharray="4 4"
+            {displayedRuptureDays <= 30 && (
+              <ReferenceLine x={`J+${Math.round(displayedRuptureDays)}`} stroke="#e53e3e" strokeDasharray="4 4"
                 label={{ value: 'Rupture', fill: '#e53e3e', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
             )}
           </ComposedChart>

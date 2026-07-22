@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import type { AuthUser, Incident } from '../data'
-import { INCIDENTS, DEPOTS, INCIDENT_BY_SEVERITY, getDepotName, fmt } from '../data'
+import { INCIDENTS, DEPOTS, PRODUCTS, INCIDENT_BY_SEVERITY, getDepotName, fmt } from '../data'
 import { Button, EmptyState } from '../components/ui'
 import { useToast } from '../lib/toast'
-import { loadIncidents, saveIncidents } from '../lib/storage'
+import { createIncidentViaApi, loadIncidents, saveIncidents } from '../lib/storage'
+import * as api from '../lib/api'
+import type { CreerIncidentData } from '../lib/api'
 
 const SEV_META: Record<Incident['severity'], { label: string; color: string }> = {
   faible:   { label: 'Faible',   color: '#38a169' },
@@ -27,9 +29,10 @@ const SEVERITY_BY_LABEL: Record<string, Incident['severity']> = {
 
 let incidentSeq = INCIDENTS.length + 1
 
-function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; user: AuthUser; onCreate: (i: Incident) => void }) {
+function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; user: AuthUser; onCreate: (data: CreerIncidentData) => Promise<void> }) {
   const [form, setForm] = useState({
     depotId: user.depotId ?? 'D1',
+    productId: 'P1',
     type: '',
     customType: '',
     description: '',
@@ -45,24 +48,21 @@ function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; us
     fontFamily: "'DM Sans', sans-serif",
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     setTouched(true)
     if (!isValid) return
-    const t = selectedType.toLowerCase()
-    const severity: Incident['severity'] = t.includes('fuite') ? 'eleve' : t.includes('panne') ? 'critique' : 'modere'
-    const newIncident: Incident = {
-      id: `I${incidentSeq}`,
-      ref: `INC-2024-0${159 + incidentSeq}`,
-      depotId: form.depotId,
-      type: selectedType,
-      severity,
+    const data: CreerIncidentData = {
+      date_incident: new Date().toISOString().slice(0, 10),
+      depot_id: `D${form.depotId.replace(/^D/, '').padStart(3, '0')}`,
+      produit_concerne_id: `PRD${form.productId.replace(/^P/, '').padStart(3, '0')}`,
+      type_incident: selectedType,
+      duree_arret_heures: 0,
+      quantite_perdue: 0,
+      heure_int: new Date().getHours(),
+      mois: new Date().getMonth() + 1,
       description: form.description.trim(),
-      date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      costFCFA: 0,
-      status: 'ouvert',
     }
-    incidentSeq += 1
-    onCreate(newIncident)
+    await onCreate(data)
     onClose()
   }
 
@@ -87,6 +87,12 @@ function NewIncidentModal({ onClose, user, onCreate }: { onClose: () => void; us
               <select value={form.depotId} onChange={e => set('depotId', e.target.value)}
                 style={{ ...inputCls, appearance: 'none', opacity: user.role === 'depot' ? 0.6 : 1 }} disabled={user.role === 'depot'}>
                 {DEPOTS.map(d => <option key={d.id} value={d.id}>{d.city}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="font-mono text-xs uppercase tracking-widest mb-1.5 block" style={{ color: '#4a5568' }}>Produit concerné</label>
+              <select value={form.productId} onChange={e => set('productId', e.target.value)} style={{ ...inputCls, appearance: 'none' }}>
+                {PRODUCTS.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select>
             </div>
             <div>
@@ -157,7 +163,53 @@ export default function Incidents({ user }: { user: AuthUser }) {
     <div className="space-y-5 animate-fade-in">
       {showModal && (
         <NewIncidentModal user={user} onClose={() => setShowModal(false)}
-          onCreate={incident => { setAllIncidents(list => { const next = [incident, ...list]; saveIncidents(next); return next }) ; push(`Incident ${incident.ref} déclaré.`, 'error') }} />
+          onCreate={async data => {
+            const apiIncident = await createIncidentViaApi(data)
+            if (apiIncident) {
+              setAllIncidents(list => [apiIncident, ...list])
+              push(`Incident ${apiIncident.ref} déclaré et classé par l'IA.`, 'success')
+              return
+            }
+            // Fallback 2 : tenter la classification via l'IA
+            let severity: Incident['severity'] = 'modere'
+            try {
+              const resp = await fetch(`${api.API_BASE}/incidents/classifier`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  type_incident: data.type_incident,
+                  depot_id: data.depot_id,
+                  produit_concerne_id: data.produit_concerne_id || 'PRD001',
+                  duree_arret_heures: data.duree_arret_heures || 0,
+                  quantite_perdue: data.quantite_perdue || 0,
+                  heure_int: data.heure_int || new Date().getHours(),
+                  mois: data.mois || new Date().getMonth() + 1,
+                }),
+              })
+              if (resp.ok) {
+                const result = await resp.json()
+                severity = (result.gravite?.toLowerCase() || 'modere') as Incident['severity']
+              }
+            } catch {
+              // Fallback final : règle locale
+              const type = data.type_incident.toLowerCase()
+              severity = type.includes('fuite') ? 'eleve' : type.includes('panne') ? 'critique' : 'modere'
+            }
+            const localIncident: Incident = {
+              id: `I${incidentSeq}`,
+              ref: `INC-2024-0${159 + incidentSeq}`,
+              depotId: data.depot_id.replace(/^D00/, 'D'),
+              type: data.type_incident,
+              severity,
+              description: data.description || '',
+              date: data.date_incident,
+              costFCFA: 0,
+              status: 'ouvert',
+            }
+            incidentSeq += 1
+            setAllIncidents(list => { const next = [localIncident, ...list]; saveIncidents(next); return next })
+            push(`Incident ${localIncident.ref} enregistré localement.`, 'error')
+          }} />
       )}
 
       {/* Summary cards */}
