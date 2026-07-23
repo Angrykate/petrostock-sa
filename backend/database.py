@@ -3,9 +3,15 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 
 # Charge les variables du fichier .env (dont DATABASE_URL)
-load_dotenv()
+# Cherche d'abord dans backend/, puis à la racine
+env_path = Path(__file__).resolve().parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    load_dotenv()  # fallback: cherche à la racine
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 

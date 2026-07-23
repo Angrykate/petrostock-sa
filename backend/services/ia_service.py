@@ -5,9 +5,16 @@ import pandas as pd
 from fastapi import HTTPException
 from dotenv import load_dotenv
 
-load_dotenv()
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODELS_DIR = Path(os.getenv("MODELS_DIR", str(BASE_DIR / "../models"))).resolve()
+# Charge le .env du dossier backend/ pour DATABASE_URL etc.
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+
+# Chemin vers le dossier models/ à la racine du projet
+# __file__ = backend/services/ia_service.py
+# .parent = backend/services/
+# .parent.parent = backend/
+MODELS_DIR = (Path(__file__).resolve().parent.parent / "../models").resolve()
 
 
 class IAService:

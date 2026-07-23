@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Plus, Edit2, Power, Shield, X } from 'lucide-react'
+import { useMemo, useState, useEffect } from 'react'
+import { Plus, Edit2, Power, Shield, X, Check, Save } from 'lucide-react'
 import { SYSTEM_USERS, DEPOTS, ROLE_LABELS, ROLE_COLORS } from '../data'
 import type { Role, SystemUser } from '../data'
 import { Button } from '../components/ui'
@@ -127,6 +127,117 @@ function UserModal({
           <Button variant="danger" className="flex-1 text-base" onClick={handleSave}>{initialUser ? 'ENREGISTRER' : 'CRÉER'}</Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ConfigSection({ push, auditLog, setAuditLog }: { push: (msg: string, type?: any) => void; auditLog: any[]; setAuditLog: (f: any) => void }) {
+  const [editingSection, setEditingSection] = useState<string | null>(null)
+  const [editValues, setEditValues] = useState<string[]>([])
+
+  const sections = [
+    { id: 'depots', title: 'Dépôts & Capacités', items: DEPOTS.map(d => ({ key: d.city, val: `${(d.capacity/1_000_000).toFixed(1)} ML` })) },
+    { id: 'seuils', title: 'Seuils d\'alerte globaux', items: [
+      { key: 'Seuil critique', val: '< 10% capacité' },
+      { key: 'Seuil avertissement', val: '< 25% capacité' },
+      { key: 'Délai rupture critique', val: '≤ 5 jours' },
+      { key: 'Délai rupture alerte', val: '≤ 10 jours' },
+    ]},
+    { id: 'ia', title: 'Paramètres IA', items: [
+      { key: 'Modèle prévision', val: 'Prophet' },
+      { key: 'Horizon prévision', val: '30 jours' },
+      { key: 'Intervalle recalcul', val: 'Quotidien 02:00' },
+      { key: 'Seuil anomalie (score)', val: 'Continu (0-1)' },
+    ]},
+    { id: 'notifications', title: 'Notifications', items: [
+      { key: 'Email alertes critiques', val: 'Activé' },
+      { key: 'SMS rupture imminente', val: 'Activé' },
+      { key: 'Rapport quotidien', val: '07:00 WAT' },
+      { key: 'Rapport mensuel', val: '1er du mois' },
+    ]},
+  ]
+
+  function handleEdit(section: typeof sections[0]) {
+    const saved = JSON.parse(localStorage.getItem('petrostock.config') || '{}')
+    setEditValues(saved[section.id] || section.items.map(i => i.val))
+    setEditingSection(section.id)
+  }
+
+  function handleSave(section: typeof sections[0]) {
+    const saved = JSON.parse(localStorage.getItem('petrostock.config') || '{}')
+    saved[section.id] = editValues
+    localStorage.setItem('petrostock.config', JSON.stringify(saved))
+    setEditingSection(null)
+    push(`Configuration « ${section.title} » mise à jour.`, 'success')
+    setAuditLog((list: any[]) => {
+      const entry = { ts: new Date().toLocaleTimeString('fr-FR', { hour12: false }), user: 'admin@petrostock.tg', action: 'CONFIG_UPDATED', target: section.title, level: 'INFO' as const }
+      const nextLog = [entry, ...list]
+      saveAuditLog(nextLog)
+      return nextLog
+    })
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {sections.map(section => {
+        const isEditing = editingSection === section.id
+        const values = isEditing ? editValues : (JSON.parse(localStorage.getItem('petrostock.config') || '{}')[section.id] || section.items.map(i => i.val))
+
+        return (
+          <div key={section.title} className="rounded-xl border p-5" style={{ background: '#0c1121', borderColor: '#1c2540' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-1 h-4 rounded" style={{ background: '#e53e3e' }} />
+                <h3 className="font-display text-sm font-bold tracking-wide text-white" style={{ letterSpacing: '0.06em' }}>
+                  {section.title.toUpperCase()}
+                </h3>
+              </div>
+              {isEditing ? (
+                <div className="flex gap-2">
+                  <button onClick={() => setEditingSection(null)}
+                    className="font-mono text-xs px-2 py-1 rounded border hover:bg-white/5 transition-colors"
+                    style={{ borderColor: '#1c2540', color: '#718096' }}>
+                    Annuler
+                  </button>
+                  <button onClick={() => handleSave(section)}
+                    className="font-mono text-xs px-2 py-1 rounded flex items-center gap-1"
+                    style={{ background: '#38a169', color: '#000' }}>
+                    <Save size={12} /> Enregistrer
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => handleEdit(section)}
+                  className="font-mono text-xs px-2 py-1 rounded border hover:bg-white/5 transition-colors"
+                  style={{ borderColor: '#1c2540', color: '#718096' }}>
+                  Modifier
+                </button>
+              )}
+            </div>
+            <div className="space-y-2.5">
+              {section.items.map((item, idx) => (
+                <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0" style={{ borderColor: '#1c2540' }}>
+                  <span className="font-mono text-xs" style={{ color: '#718096' }}>{item.key}</span>
+                  {isEditing ? (
+                    <input value={editValues[idx] || ''}
+                      onChange={e => {
+                        const next = [...editValues]
+                        next[idx] = e.target.value
+                        setEditValues(next)
+                      }}
+                      style={{
+                        background: '#060912', border: '1px solid #1c2540', color: '#e2e8f0',
+                        borderRadius: 4, padding: '2px 8px', fontSize: 12,
+                        fontFamily: "'JetBrains Mono', monospace", textAlign: 'right', width: 140,
+                      }} />
+                  ) : (
+                    <span className="font-mono text-xs text-white">{values[idx]}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -344,6 +455,13 @@ export default function Administration() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <button
+                            onClick={() => toggleUser(u.id)}
+                            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-white/5"
+                            style={{ color: u.active ? '#38a169' : '#4a5568' }} 
+                            title={u.active ? 'Désactiver' : 'Activer'}>
+                            <Power size={13} />
+                          </button>
+                          <button
                             onClick={() => { setEditingUser(u); setShowModal(true) }}
                             className="w-7 h-7 flex items-center justify-center rounded-md transition-colors hover:bg-white/5"
                             style={{ color: '#718096' }} title="Modifier">
@@ -370,54 +488,11 @@ export default function Administration() {
 
       {/* Config tab */}
       {activeTab === 'config' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { title: 'Dépôts & Capacités', items: DEPOTS.map(d => ({ key: d.city, val: `${(d.capacity/1_000_000).toFixed(1)} ML` })) },
-            { title: 'Seuils d\'alerte globaux', items: [
-              { key: 'Seuil critique', val: '< 10% capacité' },
-              { key: 'Seuil avertissement', val: '< 25% capacité' },
-              { key: 'Délai rupture critique', val: '≤ 5 jours' },
-              { key: 'Délai rupture alerte', val: '≤ 10 jours' },
-            ]},
-            { title: 'Paramètres IA', items: [
-              { key: 'Modèle prévision', val: 'Prophet + LSTM' },
-              { key: 'Horizon prévision', val: '30 jours' },
-              { key: 'Intervalle recalcul', val: 'Quotidien 02:00' },
-              { key: 'Seuil anomalie (z-score)', val: '3.0' },
-            ]},
-            { title: 'Notifications', items: [
-              { key: 'Email alertes critiques', val: 'Activé' },
-              { key: 'SMS rupture imminente', val: 'Activé' },
-              { key: 'Rapport quotidien', val: '07:00 WAT' },
-              { key: 'Rapport mensuel', val: '1er du mois' },
-            ]},
-          ].map(section => (
-            <div key={section.title} className="rounded-xl border p-5" style={{ background: '#0c1121', borderColor: '#1c2540' }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-4 rounded" style={{ background: '#e53e3e' }} />
-                  <h3 className="font-display text-sm font-bold tracking-wide text-white" style={{ letterSpacing: '0.06em' }}>
-                    {section.title.toUpperCase()}
-                  </h3>
-                </div>
-                <button
-                  onClick={() => push(`Modification de « ${section.title} » — fonctionnalité à venir.`, 'info')}
-                  className="font-mono text-xs px-2 py-1 rounded border hover:bg-white/5 transition-colors"
-                  style={{ borderColor: '#1c2540', color: '#718096' }}>
-                  Modifier
-                </button>
-              </div>
-              <div className="space-y-2.5">
-                {section.items.map(item => (
-                  <div key={item.key} className="flex items-center justify-between py-2 border-b last:border-0" style={{ borderColor: '#1c2540' }}>
-                    <span className="font-mono text-xs" style={{ color: '#718096' }}>{item.key}</span>
-                    <span className="font-mono text-xs text-white">{item.val}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ConfigSection
+          push={push}
+          auditLog={auditLog}
+          setAuditLog={setAuditLog}
+        />
       )}
 
       {/* Audit log tab */}
