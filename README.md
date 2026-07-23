@@ -1,122 +1,157 @@
-# PetroStock SA — Système Intelligent de Gestion des Stocks
+# ⛽ PetroStock SA
 
-> Projet de stage — École Polytechnique de Lomé · Année Universitaire 2025–2026
+**Système Intelligent de Gestion des Stocks Pétroliers** — Plateforme de pilotage opérationnel pour la gestion des dépôts de produits pétroliers au Togo.
 
-Conception et développement d'un système intelligent de gestion et d'analyse
-des stocks pour une entreprise pétrolière fictive localisée au Togo, intégrant
-des modèles d'intelligence artificielle, une API REST et un tableau de bord interactif.
-
----
-
-## Équipe
-
-| Nom | Parcours | Rôle |
-|---|---|---|
-| SIDIBE Illane | LF-IABD | IA & Analyse des données |
-| SEMAGNON Akpène Bertille | LF-IABD | IA & Analyse des données |
-| SEGNEDJI Komivi Emmanuel | LF-IS | Base de données & API Backend |
-| BODJOLLE Gwénaëlle Médédé | LF-LT | Logistique, UML & Documentation |
-
-**Directeur :** Dr ATTIPOU K., École Polytechnique de Lomé
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)
+![React](https://img.shields.io/badge/Frontend-React-61DAFB)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB)
 
 ---
 
-## Architecture du Système
+## 📋 À propos
 
-```
-PostgreSQL (BDD) ←→ FastAPI (API REST) ←→ Next.js (Dashboard)
-                         ↑
-                   Modèles IA (.pkl)
-```
+PetroStock SA est une application web complète développée dans le cadre de l'EPL 2025-2026. Elle permet de **visualiser, analyser et gérer** les stocks de produits pétroliers répartis sur 8 dépôts au Togo.
 
-## Stack Technique
-
-| Composant | Technologie |
-|---|---|
-| Base de données | PostgreSQL |
-| API Backend | FastAPI (Python) |
-| Frontend | Next.js + TailwindCSS |
-| Modèles IA | Scikit-learn, Prophet, XGBoost |
-| Analyse de données | Pandas, NumPy, Matplotlib, Seaborn |
+Le projet combine :
+- Un **backend REST** (FastAPI) connecté à une base de données PostgreSQL/SQLite
+- Un **frontend moderne** (React/Vite) avec dashboard, graphiques et alertes en temps réel
+- Des **modèles d'intelligence artificielle** pour les prévisions de demande, la détection d'anomalies et la classification d'incidents
 
 ---
 
-## Structure du Projet
+## 🏗️ Architecture
 
 ```
-petrostack-sa/
-├── notebooks/        ← Notebooks Jupyter (EDA + modèles IA)
-├── models/           ← Modèles entraînés (.pkl) — non versionnés
-├── sql/              ← Scripts de création et peuplement de la base
-├── backend/          ← API FastAPI
-├── frontend/         ← Interface web Next.js
-├── figures/          ← Graphiques générés par les notebooks
-├── data/             ← Données CSV — non versionnées (voir data/README.md)
-└── docs/             ← Documentation et rapport final
+┌─────────────────────────────────────────────────────┐
+│                   Frontend React/Vite                │
+│              http://localhost:8443                   │
+│  Dashboard │ Stocks │ Commandes │ Incidents │ IA ... │
+└───────────────────────┬─────────────────────────────┘
+                        │ API REST (JSON)
+                        ▼
+┌─────────────────────────────────────────────────────┐
+│                  Backend FastAPI                     │
+│              http://localhost:8000                   │
+│  8 routers · 15 endpoints · Swagger : /docs         │
+└───────────────────────┬─────────────────────────────┘
+                        │ SQLAlchemy ORM
+                        ▼
+┌─────────────────────────────────────────────────────┐
+│              Base de données (SQLite/PostgreSQL)      │
+│  8 dépôts · 9 produits · 960 enregistrements stocks  │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Installation et Lancement
+## ✨ Fonctionnalités
 
-> ⚠️ Documentation complète à venir en fin de projet.
+| Page | Description |
+|------|-------------|
+| **Dashboard** | KPIs, graphiques d'évolution, alertes stock, commandes récentes, incidents — vue adaptée au rôle |
+| **Stocks** | Suivi détaillé par dépôt et produit, barres de remplissage, alertes critiques |
+| **Commandes** | Création et suivi des bons de commande (brouillon → livrée), suggestion fournisseurs |
+| **Incidents** | Déclaration et suivi, classification automatique par gravité, escalade |
+| **Prévisions IA** | Prévisions 30 jours (Prophet/ARIMA/XGBoost), détection ruptures imminentes |
+| **Ventes & Finance** | Chiffre d'affaires, analyse par type de client, suivi des paiements |
+| **Fournisseurs** | Catalogue, scores de fiabilité, recommandations |
+| **Administration** | Gestion des utilisateurs (4 rôles), journal d'audit, configuration |
+
+---
+
+## 🚀 Démarrage rapide
 
 ### Prérequis
 
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 15+
+- Python 3.12+
+- Node.js 20+
+- npm 10+
 
-### Environnement Python pour les notebooks
-
-Créer la `.venv` à la racine du projet puis installer les dépendances des notebooks:
+### Installation
 
 ```bash
+# 1. Cloner le dépôt
+git clone https://github.com/Angrykate/petrostock-sa.git
+cd petrostock-sa
+
+# 2. Backend
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-Les notebooks utilisent principalement `pandas`, `numpy`, `matplotlib`, `seaborn`, `statsmodels`, `prophet`, `scikit-learn`, `xgboost`, `ipykernel` et `jupyter`.
-
-### Backend
-
-```bash
+.venv\Scripts\activate          # Windows
+source .venv/bin/activate       # Linux/Mac
+pip install -r backend/requirements.txt
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
-```
+python init_db.py               # Crée la base SQLite avec données de test
+cd ..
 
-### Frontend
-
-```bash
+# 3. Frontend
 cd frontend
 npm install
+cd ..
+```
+
+### Lancement
+
+**Terminal 1 — Backend :**
+```bash
+cd backend
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 — Frontend :**
+```bash
+cd frontend
 npm run dev
 ```
 
----
+Accédez à **http://localhost:8443** pour le dashboard.
 
-## Notebooks
+### Identifiants de démonstration
 
-| # | Notebook | Auteur | Description |
-|---|---|---|---|
-| 01 | `eda_stocks_journaliers` | SIDIBE | EDA — table stocks journaliers |
-| 02 | `eda_incidents_pannes` | SIDIBE | EDA — table incidents & pannes |
-| 03 | `modele_prevision_demande` | SIDIBE | Prophet vs ARIMA |
-| 04 | `modele_ruptures_stock` | SIDIBE | XGBoost vs Random Forest |
-| 05 | `eda_mouvements` | SEMAGNON | EDA — table mouvements |
-| 06 | `eda_ventes_commandes` | SEMAGNON | EDA — factures & bons de commande |
-| 07 | `modele_detection_anomalies` | SEMAGNON | Isolation Forest vs Z-score |
-| 08 | `modele_classification_incidents` | SEMAGNON | Random Forest vs SVM |
+| Rôle | Email | Mot de passe |
+|------|-------|-------------|
+| Responsable Dépôt | `k.asante@petrostock.tg` | `depot2024` |
+| Responsable Achat | `y.dossou@petrostock.tg` | `achat2024` |
+| Direction | `s.koffi@petrostock.tg` | `dir2024` |
+| Administrateur | `admin@petrostock.tg` | `admin2024` |
 
 ---
 
-## Données
+## 📡 API
 
-Les fichiers CSV ne sont pas versionnés. Voir [`data/README.md`](data/README.md).
+Documentation interactive disponible sur **http://localhost:8000/docs** (Swagger UI).
+
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET` | `/` | Accueil API |
+| `GET` | `/stocks/` | Liste des stocks (filtres : `depot_id`, `produit_id`) |
+| `GET` | `/stocks/alertes/` | Stocks en dessous du seuil d'alerte |
+| `GET` | `/commandes/` | Liste des commandes |
+| `POST` | `/commandes/` | Créer une commande |
+| `GET` | `/incidents/` | Liste des incidents |
+| `POST` | `/incidents/` | Déclarer un incident |
+| `GET` | `/factures/` | Liste des factures |
+| `GET` | `/kpi/` | Indicateurs clés (valeur stock, alertes, remplissage, incidents) |
+| `GET` | `/anomalies/` | Anomalies détectées en base |
+| `POST` | `/anomalies/detecter` | Détection d'anomalie en temps réel |
+| `GET` | `/ruptures/{depot_id}` | Estimation jours avant rupture |
+| `GET` | `/previsions/{produit_id}` | Prévisions de demande 30 jours |
 
 ---
 
-*Ce README sera complété à la fin du projet avec les résultats des modèles,
-les métriques de performance et les captures d'écran du dashboard.*
+## 👥 Équipe
+
+- **BODJOLLE**
+- **SEGNEDJI**
+- **SIDIBE**
+- **SEMAGNON**
+
+---
+
+## 📄 Licence
+
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE).
+
+---
+
+*EPL 2025-2026 — Lomé, Togo*

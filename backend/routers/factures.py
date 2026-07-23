@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from database import get_db
-from models import FactureVente
-from schemas.factures import FactureOut
+from backend.database import get_db
+from backend.models import FactureVente
+from backend.schemas.factures import FactureOut
 
 router = APIRouter(prefix="/factures", tags=["Factures"])
 
