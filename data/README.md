@@ -5,7 +5,7 @@ pour Git). Ils sont disponibles via le lien partagé ci-dessous.
 
 ## Téléchargement
 
-**Google Drive :** `[LIEN À AJOUTER PAR L'ÉQUIPE]`
+**Google Drive :** [Télécharger les fichiers CSV](https://drive.google.com/drive/folders/1Kk5PwNHbJ7x7_w_GqO_mHlnJ7E0WCR7b?usp=sharing)
 
 Placer les fichiers téléchargés dans ce dossier `data/` avant d'exécuter
 les notebooks.
